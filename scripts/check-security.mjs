@@ -145,7 +145,7 @@ function findMarker(lines, i, rule) {
     if (j < 0) continue;
     const m = MARKER.exec(lines[j]);
     if (m && m[1].toLowerCase() === rule) {
-      const reason = m[2].replace(/(?:\*\/\}?|-->)\s*$/, "").trim();
+      const reason = m[2].replace(/(?:\*\/\}?|--!?>)\s*$/, "").trim();
       return { reason: reason.length >= 10 ? reason : "" };
     }
   }
@@ -278,7 +278,7 @@ function checkCss(f, file, text) {
  *  Data blocks (type="application/json") are not code and are left blank. */
 function inlineScripts(html) {
   const out = html.replace(/[^\n]/g, " ").split("");
-  for (const m of html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script\s*>/gi)) {
+  for (const m of html.matchAll(/<script\b([^>]*)>([\s\S]*?)<\/script[^>]*>/gi)) {
     const attrs = m[1];
     if (/\bsrc\s*=/i.test(attrs)) continue;
     const type = /\btype\s*=\s*["']?([^\s"'>]+)/i.exec(attrs)?.[1];

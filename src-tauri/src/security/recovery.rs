@@ -150,10 +150,10 @@ fn prepare_secret(secret: &str, kind: WrapKind) -> String {
 }
 
 pub fn wrap_dek(dek: &Dek, secret: &str, kind: WrapKind) -> AppResult<Wrap> {
-    let mut salt = [0u8; 16];
-    let mut nonce = [0u8; 24];
-    rand::rng().fill_bytes(&mut salt);
-    rand::rng().fill_bytes(&mut nonce);
+    // Fresh from the system's random source every time: a wrap never reuses a
+    // salt or a nonce.
+    let mut salt: [u8; 16] = rand::random();
+    let mut nonce: [u8; 24] = rand::random();
 
     let kek = derive_kek(
         &prepare_secret(secret, kind),

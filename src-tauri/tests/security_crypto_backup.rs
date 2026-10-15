@@ -46,7 +46,6 @@ use coin_heaven_lib::db::Db;
 use coin_heaven_lib::error::{AppError, AppResult};
 use coin_heaven_lib::security::recovery::{self, Dek, KeyInfo, Wrap, WrapKind};
 use coin_heaven_lib::state::AppState;
-use rand::RngCore;
 use secrecy::{ExposeSecret, SecretString};
 use sha2::{Digest, Sha256};
 use std::collections::BTreeMap;
@@ -223,10 +222,8 @@ fn kek(secret: &str, salt: &[u8], (m, t, p): (u32, u32, u32)) -> [u8; 32] {
 }
 
 fn forge_wrap(dek: &Dek, secret: &str, kind: WrapKind, cost: (u32, u32, u32)) -> Wrap {
-    let mut salt = [0u8; 16];
-    let mut nonce = [0u8; 24];
-    rand::rng().fill_bytes(&mut salt);
-    rand::rng().fill_bytes(&mut nonce);
+    let salt: [u8; 16] = rand::random();
+    let nonce: [u8; 24] = rand::random();
     let secret = match kind {
         WrapKind::Recovery => recovery::normalise_phrase(secret),
         WrapKind::Passphrase => secret.to_string(),
@@ -476,8 +473,8 @@ fn a_malformed_key_never_reaches_sqlcipher() {
         let key = SecretString::from(key);
         assert!(
             matches!(Db::open(&path, &key), Err(AppError::Invalid(_))),
-            "open accepted {:?}",
-            key.expose_secret()
+            "open accepted a malformed key of {} bytes",
+            key.expose_secret().len()
         );
         assert!(
             matches!(Db::rekey(&path, &good, &key), Err(AppError::Invalid(_))),
@@ -585,7 +582,7 @@ fn the_right_secrets_unlock_and_the_wrong_ones_leave_the_app_locked() {
     ] {
         assert!(
             bootstrap::unlock_with_phrase(&st, wrong).is_err(),
-            "phrase {wrong:?} was accepted"
+            "a wrong phrase was accepted"
         );
     }
 
@@ -1943,7 +1940,7 @@ fn a_failed_legacy_upgrade_leaves_the_database_openable_with_its_old_key() {
 
     // A version 1 install: the key is Argon2id(phrase) itself.
     let phrase = recovery::generate_phrase().unwrap();
-    let salt = [7u8; 16];
+    let salt: [u8; 16] = rand::random();
     let cost = (1024, 1, 1);
     let old_key = SecretString::from(hex_of(&kek(
         &recovery::normalise_phrase(phrase.expose_secret()),
@@ -2037,8 +2034,11 @@ fn common_passphrases_are_rated_as_very_weak_and_a_strong_one_is_not() {
         "        ",
     ] {
         let r = recovery::rate_passphrase(common);
-        assert!(r.score <= 1, "{common:?} scored {}", r.score);
-        assert!(!r.message.is_empty(), "no advice is given for {common:?}");
+        assert!(r.score <= 1, "a common passphrase scored {}", r.score);
+        assert!(
+            !r.message.is_empty(),
+            "no advice is given for a common passphrase"
+        );
     }
     let strong = recovery::rate_passphrase("seven purple lanterns drift");
     assert!(strong.score >= 3, "score {}", strong.score);
@@ -2063,7 +2063,7 @@ fn a_common_or_blank_passphrase_is_not_acceptable() {
         let r = recovery::rate_passphrase(common);
         assert!(
             !r.acceptable,
-            "{common:?} is acceptable (score {})",
+            "a common passphrase is acceptable (score {})",
             r.score
         );
     }

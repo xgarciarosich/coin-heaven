@@ -322,11 +322,11 @@ fn passphrase_strength_blocks_only_on_length() {
     // user cannot remember is not a security win.
     let weak = rate_passphrase("password123");
     assert!(weak.acceptable);
-    assert!(weak.score <= 2, "score {}", weak.score);
+    assert!(weak.score <= 2, "weak score {}", weak.score);
 
     let strong = rate_passphrase("seven purple lanterns drift");
     assert!(strong.acceptable);
-    assert!(strong.score >= 3, "score {}", strong.score);
+    assert!(strong.score >= 3, "strong score {}", strong.score);
 }
 
 #[test]

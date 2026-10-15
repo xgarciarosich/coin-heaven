@@ -520,7 +520,7 @@ mod tests {
 
         // Build a v1 world by hand: key derived straight from the phrase.
         let phrase = recovery::generate_phrase().unwrap();
-        let salt = [7u8; 16];
+        let salt: [u8; 16] = rand::random();
         let old_key = legacy_derive(phrase.expose_secret(), &salt, 65_536, 3, 1).unwrap();
         {
             let db = Db::open(&st.db_path, &old_key).unwrap();
@@ -580,7 +580,7 @@ mod tests {
     fn upgrading_with_the_wrong_phrase_leaves_the_database_alone() {
         let (dir, st) = state();
         let phrase = recovery::generate_phrase().unwrap();
-        let salt = [9u8; 16];
+        let salt: [u8; 16] = rand::random();
         let old_key = legacy_derive(phrase.expose_secret(), &salt, 65_536, 3, 1).unwrap();
         drop(Db::open(&st.db_path, &old_key).unwrap());
 
