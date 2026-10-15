@@ -1,0 +1,16 @@
+export const nav = {
+  cashflow: "Cash flow",
+  wealth: "Net worth",
+  fire: "Independence",
+  simulator: "Simulator",
+  assistant: "Assistant",
+  settings: "Settings",
+  tagline: "Wealth & property",
+  phraseUnconfirmed: "Recovery phrase not confirmed",
+  unlocked: "Encrypted · unlocked",
+  locked: "Locked",
+  version: (v: string, schema: string) => `v${v} · schema ${schema}`,
+  toTheme: (dark: boolean) => `Switch to ${dark ? "dark" : "light"} theme`,
+  privacyOn: "Hide amounts",
+  privacyOff: "Show amounts",
+};

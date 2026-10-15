@@ -1,0 +1,54 @@
+{
+  "$schema": "./region.schema.json",
+  "id": "es",
+  "name": "España",
+  "country": "Spain",
+  "locale": "es-ES",
+  "currency": "EUR",
+  "currencySymbol": "€",
+  "symbolFirst": true,
+
+  "investmentTax": {
+    "name": "IRPF, base del ahorro",
+    "year": 2026,
+    "source": "sede.agenciatributaria.gob.es",
+    "note": "Tipos de la base del ahorro, estatal y autonómico sumados. Compruébalos con tu comunidad.",
+    "bands": [
+      { "upTo": 6000, "rate": 19 },
+      { "upTo": 50000, "rate": 21 },
+      { "upTo": 200000, "rate": 23 },
+      { "upTo": 300000, "rate": 27 },
+      { "rate": 30 }
+    ]
+  },
+
+  "retirement": {
+    "pensionAge": 67,
+    "withdrawalRate": 4
+  },
+
+  "property": {
+    "purchaseTax": 10,
+    "mortgageShare": 80,
+    "mortgageRate": 2.8,
+    "mortgageYears": 25,
+    "otherPurchaseCosts": 1.5,
+    "maxDebtToIncome": 35,
+    "rentCountedByBank": 70,
+    "rentalProfitTax": 19,
+    "fixedCostsPerYear": 900,
+    "agencyFee": 8,
+    "maintenance": 5
+  },
+
+  "merchantNoise": [
+    "compra", "tarjeta", "targeta", "tarj", "pago", "pagos", "recibo", "recibos",
+    "transferencia", "transf", "traspaso", "adeudo", "cargo", "abono", "ingreso",
+    "operacion", "movimiento", "comision", "comisiones", "factura", "domiciliacion",
+    "domiciliado", "efectivo", "cajero", "concepto", "referencia", "fecha", "valor",
+    "nacional", "internacional", "cuenta", "banco", "oficina", "titular", "emisor",
+    "ordenante", "beneficiario", "liquidacion", "periodo", "mes", "del", "por",
+    "para", "con", "sin", "las", "los", "una", "uno", "que", "des", "sus", "bizum",
+    "visa", "mastercard", "debito", "credito", "online", "contactless"
+  ]
+}

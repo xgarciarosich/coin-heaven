@@ -1,0 +1,4 @@
+# A build-time dependency (source-map-js, used by vite/postcss) had a
+# denial-of-service advisory below 1.2.2.
+overrides:
+  source-map-js: '>=1.2.2'

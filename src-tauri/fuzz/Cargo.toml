@@ -1,0 +1,125 @@
+[package]
+name = "coin-heaven-fuzz"
+version = "0.0.0"
+description = "Fuzz targets for the parts of Coin Heaven that read files and replies from outside"
+publish = false
+edition = "2021"
+
+[package.metadata]
+cargo-fuzz = true
+
+# Helpers the targets share. Nothing in here is under test.
+[lib]
+name = "coin_heaven_fuzz"
+path = "src/lib.rs"
+
+[dependencies]
+libfuzzer-sys = "0.4"
+coin-heaven = { path = ".." }
+chrono = "0.4.45"
+csv = "1.4.0"
+encoding_rs = "0.8.35"
+regex = "1.13.1"
+rusqlite = "0.40.2"
+secrecy = "0.10.3"
+serde_json = "1.0.151"
+tempfile = "3.27.0"
+
+# Its own workspace, so none of this is built (or locked) with the app.
+[workspace]
+
+# Debug assertions and overflow checks on: an overflow is a panic here, which is
+# how the fuzzer sees it, where the shipped build would wrap silently.
+[profile.release]
+debug = 1
+debug-assertions = true
+overflow-checks = true
+
+# One block per target; `cargo fuzz add` writes the same shape.
+
+# --- importing a statement: file, table, columns, rows ---
+[[bin]]
+name = "table_load"
+path = "fuzz_targets/table_load.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "xlsx_load"
+path = "fuzz_targets/xlsx_load.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "sniff_detect"
+path = "fuzz_targets/sniff_detect.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "parse_rows"
+path = "fuzz_targets/parse_rows.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "dates_amounts"
+path = "fuzz_targets/dates_amounts.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "merchant_key"
+path = "fuzz_targets/merchant_key.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "pdf_rows"
+path = "fuzz_targets/pdf_rows.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "text_repair"
+path = "fuzz_targets/text_repair.rs"
+test = false
+doc = false
+bench = false
+
+# --- what comes back from the network ---
+[[bin]]
+name = "market_json"
+path = "fuzz_targets/market_json.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "update_release"
+path = "fuzz_targets/update_release.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "ai_price_reply"
+path = "fuzz_targets/ai_price_reply.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "ai_envelopes"
+path = "fuzz_targets/ai_envelopes.rs"
+test = false
+doc = false
+bench = false
+

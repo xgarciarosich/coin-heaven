@@ -1,0 +1,10 @@
+# One set of line endings in the repository, whichever platform checked it
+# out: a CRLF fixture is a different file, and a test that reads one has
+# stopped testing what it says.
+* text=auto eol=lf
+*.csv -text
+*.png binary
+*.icns binary
+*.ico binary
+*.xlsx binary
+*.pdf binary

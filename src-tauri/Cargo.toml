@@ -1,0 +1,61 @@
+[package]
+name = "coin-heaven"
+version = "1.0.0"
+description = "Local-first wealth and real estate portfolio simulator"
+edition = "2024"
+rust-version = "1.88"
+license = "MIT"
+publish = false
+# Set to this project's GitHub address before the first release: the update
+# check reads its release page from here, and refuses the placeholder.
+repository = "https://github.com/xgarciarosich/coin-heaven"
+
+[lib]
+name = "coin_heaven_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.6.3", features = ["codegen"] }
+
+[dependencies]
+anyhow = "1.0.104"
+argon2 = "0.5.3"
+base64 = "0.23.1"
+bip39 = "2.2.2"
+calamine = { version = "0.36.1", features = ["dates"] }
+chacha20poly1305 = "0.11.0"
+chrono = { version = "0.4.45", features = ["serde"] }
+csv = "1.4.0"
+encoding_rs = "0.8.35"
+once_cell = "1.21.4"
+pdf-extract = "0.12.1"
+rand = "0.9.5"
+regex = "1.13.1"
+reqwest = { version = "0.13.4", default-features = false, features = ["rustls", "json", "charset", "http2"] }
+rusqlite = { version = "0.40.2", features = ["bundled-sqlcipher-vendored-openssl", "chrono", "serde_json"] }
+rusqlite_migration = "2.5.0"
+secrecy = "0.10.3"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.151"
+sha2 = "0.11.0"
+tauri = { version = "2.11.5", features = [] }
+tauri-plugin-dialog = "2.7.3"
+thiserror = "2.0.20"
+tokio = { version = "1.53.1", features = ["rt-multi-thread", "macros", "sync", "time"] }
+tracing = "0.1.44"
+tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
+uuid = "1.20.0"
+zeroize = { version = "1.8.2", features = ["derive"] }
+zxcvbn = "3.1.1"
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+panic = "abort"
+strip = true
+
+[dev-dependencies]
+approx = "0.5.1"
+base64 = "0.23.1"
+tempfile = "3.27.0"

@@ -1,0 +1,35 @@
+# Dependencies
+node_modules/
+# Build output
+dist/
+dist-ssr/
+src-tauri/target/
+src-tauri/gen/
+# Local data — NEVER commit a user's financial database
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+data/
+# Secrets — this project stores none in-repo, keep it that way
+.env
+.env.*
+!.env.example
+*.pem
+*.p12
+*.key
+# Local tool configuration
+.claude/
+
+# Editor / OS
+.DS_Store
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.log
+
+# Fuzzing build output and corpora
+src-tauri/fuzz/target/
+src-tauri/fuzz/corpus/
+src-tauri/fuzz/artifacts/

@@ -1,0 +1,267 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
+
+/* ---------------------------------------------------------------------------
+   Palette
+   
+   Two themes off one set of semantic names. Warm neutrals throughout — a hair
+   of yellow in every grey — so the interface reads as paper and ink rather
+   than as a screen. One accent (brass) carries meaning: it marks the value you
+   are currently changing, never decoration.
+--------------------------------------------------------------------------- */
+:root {
+  --paper:        oklch(0.986 0.005 85);
+  --paper-sunk:   oklch(0.965 0.006 85);
+  --surface:      oklch(0.998 0.002 85);
+  --surface-hi:   oklch(0.945 0.007 85);
+
+  --ink:          oklch(0.24 0.014 65);
+  --ink-2:        oklch(0.49 0.012 65);
+  --ink-3:        oklch(0.635 0.010 65);
+
+  --rule:         oklch(0.905 0.006 80);
+  --rule-strong:  oklch(0.845 0.008 80);
+
+  --brass:        oklch(0.60 0.105 68);
+  --brass-bright: oklch(0.72 0.130 72);
+  --brass-wash:   oklch(0.955 0.030 85);
+
+  --positive:     oklch(0.50 0.115 152);
+  --negative:     oklch(0.525 0.160 28);
+
+  --shadow-card:  0 1px 2px oklch(0.24 0.014 65 / 0.04),
+                  0 8px 24px -12px oklch(0.24 0.014 65 / 0.10);
+}
+
+[data-theme="dark"] {
+  --paper:        oklch(0.171 0.007 70);
+  --paper-sunk:   oklch(0.145 0.007 70);
+  --surface:      oklch(0.205 0.008 70);
+  --surface-hi:   oklch(0.245 0.009 70);
+
+  --ink:          oklch(0.945 0.006 85);
+  --ink-2:        oklch(0.725 0.010 80);
+  --ink-3:        oklch(0.565 0.010 80);
+
+  --rule:         oklch(0.285 0.008 70);
+  --rule-strong:  oklch(0.375 0.009 70);
+
+  --brass:        oklch(0.785 0.125 76);
+  --brass-bright: oklch(0.825 0.135 78);
+  --brass-wash:   oklch(0.30 0.045 72);
+
+  --positive:     oklch(0.760 0.130 155);
+  --negative:     oklch(0.690 0.155 30);
+
+  --shadow-card:  0 1px 2px oklch(0 0 0 / 0.30),
+                  0 10px 28px -14px oklch(0 0 0 / 0.55);
+}
+
+@theme inline {
+  --color-paper: var(--paper);
+  --color-paper-sunk: var(--paper-sunk);
+  --color-surface: var(--surface);
+  --color-surface-hi: var(--surface-hi);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+  --color-rule: var(--rule);
+  --color-rule-strong: var(--rule-strong);
+  --color-brass: var(--brass);
+  --color-brass-bright: var(--brass-bright);
+  --color-brass-wash: var(--brass-wash);
+  --color-positive: var(--positive);
+  --color-negative: var(--negative);
+
+  /* New York on Apple platforms, Georgia elsewhere. Bundling a webfont would
+     mean either a network request — which this app refuses to make — or
+     shipping a licensed binary, so the system serif does the display work. */
+  --font-display: ui-serif, "New York", Georgia, "Times New Roman", serif;
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI",
+    system-ui, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, monospace;
+
+  --shadow-card: var(--shadow-card);
+}
+
+/* ------------------------------------------------------------------ base -- */
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  /* A desktop app, not a document. */
+  overscroll-behavior: none;
+  user-select: none;
+  cursor: default;
+}
+
+/* Numbers line up in columns and never jitter while a slider moves. */
+.tnum {
+  font-variant-numeric: tabular-nums lining-nums;
+  font-feature-settings: "tnum" 1, "lnum" 1, "ss01" 1;
+}
+
+/* Small-caps section labels. Used sparingly — they are load-bearing, not decor. */
+.eyebrow {
+  font-size: 10px;
+  font-weight: 550;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--ink-3);
+}
+
+.display {
+  font-family: var(--font-display);
+  letter-spacing: -0.018em;
+  font-weight: 400;
+}
+
+::selection {
+  background: var(--brass-wash);
+  color: var(--ink);
+}
+
+:focus-visible {
+  outline: 2px solid var(--brass);
+  outline-offset: 2px;
+  border-radius: 3px;
+}
+
+/* Text the user is meant to read or copy stays selectable. */
+input,
+textarea,
+[data-selectable] {
+  user-select: text;
+}
+
+/* --------------------------------------------------------------- scrollbar */
+
+*::-webkit-scrollbar {
+  width: 11px;
+  height: 11px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+*::-webkit-scrollbar-thumb {
+  background: color-mix(in oklch, var(--ink-3) 32%, transparent);
+  border-radius: 99px;
+  border: 3px solid transparent;
+  background-clip: content-box;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: color-mix(in oklch, var(--ink-3) 55%, transparent);
+  background-clip: content-box;
+}
+
+/* ------------------------------------------------------------------ range --
+   The track fills to the current value via --pct, set inline by the component.
+   Two vendor blocks because WebKit and Gecko will not share a selector.
+-------------------------------------------------------------------------- */
+
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 18px;
+  background: transparent;
+  cursor: ew-resize;
+}
+
+input[type="range"]::-webkit-slider-runnable-track {
+  height: 3px;
+  border-radius: 99px;
+  background: linear-gradient(
+    to right,
+    var(--brass) 0%,
+    var(--brass) var(--pct, 50%),
+    var(--rule-strong) var(--pct, 50%),
+    var(--rule-strong) 100%
+  );
+}
+
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 13px;
+  height: 13px;
+  margin-top: -5px;
+  border-radius: 99px;
+  background: var(--surface);
+  border: 1.5px solid var(--brass);
+  box-shadow: 0 1px 3px oklch(0 0 0 / 0.18);
+  transition:
+    transform 120ms cubic-bezier(0.2, 0, 0, 1),
+    box-shadow 120ms ease;
+}
+
+input[type="range"]:hover::-webkit-slider-thumb {
+  transform: scale(1.15);
+}
+input[type="range"]:active::-webkit-slider-thumb {
+  transform: scale(0.94);
+  box-shadow: 0 0 0 4px var(--brass-wash);
+}
+
+input[type="range"]::-moz-range-track {
+  height: 3px;
+  border-radius: 99px;
+  background: var(--rule-strong);
+}
+input[type="range"]::-moz-range-progress {
+  height: 3px;
+  border-radius: 99px;
+  background: var(--brass);
+}
+input[type="range"]::-moz-range-thumb {
+  width: 13px;
+  height: 13px;
+  border-radius: 99px;
+  background: var(--surface);
+  border: 1.5px solid var(--brass);
+}
+
+/* ------------------------------------------------------------------ misc -- */
+
+textarea {
+  font-family: var(--font-mono);
+  resize: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Recharts injects inline SVG; these keep it inside the type system. */
+.recharts-surface {
+  overflow: visible;
+}
+.recharts-cartesian-axis-tick text {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  fill: var(--ink-3);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Privacy mode: amounts are masked where they are formatted; typed values in
+   form fields are blurred until the field is focused for editing. */
+.privacy main input:not(:focus) {
+  filter: blur(5px);
+}

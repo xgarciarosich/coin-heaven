@@ -1,0 +1,47 @@
+{
+  "name": "coin-heaven",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Local-first, offline, encrypted personal wealth and real estate portfolio simulator.",
+  "license": "MIT",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "check:regions": "node scripts/check-regions.mjs",
+    "check:security": "node scripts/check-security.mjs --self-test && node scripts/check-security.mjs",
+    "tauri": "tauri",
+    "app:dev": "tauri dev",
+    "app:build": "tauri build --bundles app",
+    "rs:test": "cargo test --manifest-path src-tauri/Cargo.toml",
+    "rs:lint": "cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings",
+    "rs:fmt": "cargo fmt --manifest-path src-tauri/Cargo.toml --all",
+    "verify": "pnpm typecheck && pnpm check:regions && pnpm build && pnpm rs:fmt:check && pnpm rs:lint && pnpm rs:test && pnpm check:security",
+    "rs:fmt:check": "cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check",
+    "dmg": "pnpm app:build && ./scripts/make-dmg.sh"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2.11.1",
+    "@tauri-apps/plugin-dialog": "^2.7.3",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "lucide-react": "^0.548.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "recharts": "^3.10.1",
+    "tailwind-merge": "^3.4.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.3.3",
+    "@tauri-apps/cli": "^2.11.4",
+    "@types/node": "^26.4.1",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "@vitejs/plugin-react": "^5.0.0",
+    "tailwindcss": "^4.3.3",
+    "typescript": "^7.0.2",
+    "vite": "^8.2.2"
+  }
+}

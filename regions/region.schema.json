@@ -1,0 +1,198 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Coin Heaven region",
+  "description": "Everything Coin Heaven assumes about one country. Percentages are written as percentages (19 means 19%) and money in whole units of the currency (6000 means six thousand).",
+  "type": "object",
+  "required": [
+    "id",
+    "name",
+    "country",
+    "locale",
+    "currency",
+    "currencySymbol"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z]{2}(-[a-z0-9]+)?$",
+      "description": "The file's name without .json \u2014 the country code, in lower case: us, mx, de."
+    },
+    "name": {
+      "type": "string",
+      "description": "What the country is called in its own language. Shown in Settings."
+    },
+    "country": {
+      "type": "string",
+      "description": "The country in English. Told to the AI assistant so it knows whose shops and rules to think of."
+    },
+    "locale": {
+      "type": "string",
+      "description": "A language tag such as en-US or de-DE. Decides digit grouping, the decimal mark and how dates are written."
+    },
+    "currency": {
+      "type": "string",
+      "pattern": "^[A-Z]{3}$",
+      "description": "Three-letter currency code: EUR, GBP, MXN."
+    },
+    "currencySymbol": {
+      "type": "string",
+      "description": "The symbol shown next to amounts."
+    },
+    "symbolFirst": {
+      "type": "boolean",
+      "description": "true for \u20ac1.234, false (the default) for 1.234 \u20ac."
+    },
+    "investmentTax": {
+      "type": "object",
+      "description": "Tax on gains when investments are sold. Used by the FIRE page to work out how much more has to be withdrawn to cover it.",
+      "required": [
+        "bands"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "What the tax is called locally."
+        },
+        "year": {
+          "type": "integer",
+          "description": "The tax year these rates are for."
+        },
+        "source": {
+          "type": "string",
+          "description": "Where the rates were read: the tax authority's site."
+        },
+        "bands": {
+          "type": "array",
+          "minItems": 1,
+          "description": "From the lowest band up. A flat-rate country has one band. A tax-free allowance is a first band with rate 0.",
+          "items": {
+            "type": "object",
+            "required": [
+              "rate"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "upTo": {
+                "type": "number",
+                "exclusiveMinimum": 0,
+                "description": "Gains a year up to which this rate applies. Leave it out on the last band."
+              },
+              "rate": {
+                "type": "number",
+                "minimum": 0,
+                "maximum": 100,
+                "description": "Percent."
+              }
+            }
+          }
+        },
+        "note": {
+          "type": "string",
+          "description": "A caution shown beside the rates: what they leave out, and who they are for."
+        }
+      }
+    },
+    "retirement": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "pensionAge": {
+          "type": "number",
+          "minimum": 40,
+          "maximum": 90,
+          "description": "State pension age. Default 67."
+        },
+        "withdrawalRate": {
+          "type": "number",
+          "minimum": 0.5,
+          "maximum": 15,
+          "description": "Share of the portfolio taken out each year, in percent. Default 4."
+        }
+      }
+    },
+    "property": {
+      "type": "object",
+      "description": "What a new buy-to-let plan in the Simulator starts from. Leave out whatever you do not know.",
+      "additionalProperties": false,
+      "properties": {
+        "purchaseTax": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 50,
+          "description": "Tax on buying a second-hand home, percent of the price."
+        },
+        "mortgageShare": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100,
+          "description": "Share of the price a bank typically lends, percent."
+        },
+        "mortgageRate": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 30,
+          "description": "Typical mortgage interest rate, percent a year."
+        },
+        "mortgageYears": {
+          "type": "number",
+          "minimum": 1,
+          "maximum": 50,
+          "description": "Typical mortgage length in years."
+        },
+        "otherPurchaseCosts": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 30,
+          "description": "Notary, registry and fees, percent of the price."
+        },
+        "maxDebtToIncome": {
+          "type": "number",
+          "minimum": 1,
+          "maximum": 100,
+          "description": "Share of income banks allow all debt payments to reach, percent."
+        },
+        "rentCountedByBank": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100,
+          "description": "Share of rent a bank counts as income, percent."
+        },
+        "rentalProfitTax": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100,
+          "description": "Tax on rental profit, percent."
+        },
+        "fixedCostsPerYear": {
+          "type": "number",
+          "minimum": 0,
+          "description": "Yearly cost of owning one property: local taxes, insurance, community fees."
+        },
+        "agencyFee": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100,
+          "description": "Letting agent's fee, percent of rent."
+        },
+        "maintenance": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100,
+          "description": "Set aside for repairs, percent of rent."
+        }
+      }
+    },
+    "merchantNoise": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "description": "Words that appear on bank statement lines and identify no shop \u2014 \"purchase\", \"pos debit\", \"compra\". Coin Heaven ignores them when it works out which merchant a line is from, so two visits to the same shop look alike."
+    }
+  }
+}

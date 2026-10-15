@@ -1,0 +1,99 @@
+name: Release
+
+# Tag a version to build signed, notarised installers:
+#   git tag v1.0.0 && git push origin v1.0.0
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            target: aarch64-apple-darwin
+            args: "--target aarch64-apple-darwin"
+          - os: macos-latest
+            target: x86_64-apple-darwin
+            args: "--target x86_64-apple-darwin"
+          - os: windows-latest
+            target: x86_64-pc-windows-msvc
+            args: ""
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        with: { version: 11 }
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with: { node-version: 22, cache: pnpm }
+
+      - uses: dtolnay/rust-toolchain@686976e191b89faba57d3206551f0f330d8cb249 # stable
+        with:
+          toolchain: stable
+          targets: ${{ matrix.target }}
+      - uses: Swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2
+        with:
+          workspaces: src-tauri
+          key: ${{ matrix.target }}
+
+      - run: pnpm install --frozen-lockfile
+
+      - uses: tauri-apps/tauri-action@84b9d35b5fc46c1e45415bdb6144030364f7ebc5 # v0
+        env:
+          # ---- macOS code signing + notarisation -------------------------
+          # Set these as repository secrets. Without them the macOS build
+          # still succeeds but produces an UNSIGNED app that Gatekeeper will
+          # refuse to open normally — see docs/DISTRIBUTION.md.
+          #
+          #   APPLE_CERTIFICATE          base64 of the .p12 Developer ID cert
+          #   APPLE_CERTIFICATE_PASSWORD password for that .p12
+          #   APPLE_SIGNING_IDENTITY     "Developer ID Application: NAME (TEAMID)"
+          #   APPLE_ID                   Apple account email
+          #   APPLE_PASSWORD             app-specific password, NOT the account one
+          #   APPLE_TEAM_ID              10-character team id
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: "Coin Heaven ${{ github.ref_name }}"
+          releaseBody: |
+            Local-first wealth and real estate portfolio simulator.
+
+            **macOS** — download the `.dmg` for your chip (Apple silicon =
+            aarch64, Intel = x86_64).
+
+            **Windows** — the installer is not signed with an EV certificate,
+            so SmartScreen shows a blue warning on first run. Click
+            **More info → Run anyway**. Full explanation and checksum
+            verification steps are in `docs/DISTRIBUTION.md`.
+
+            Your data stays on your machine. Write down the recovery phrase
+            shown at first launch — without it a reset keychain means the
+            database cannot be opened.
+          releaseDraft: true
+          prerelease: false
+          args: ${{ matrix.args }}
+
+  checksums:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Note
+        run: |
+          echo "Release is a DRAFT. Before publishing:"
+          echo "  1. Download each artefact and record its SHA-256."
+          echo "  2. Paste the checksums into the release notes."
+          echo "  3. Verify the macOS build is notarised:"
+          echo "     spctl -a -vvv -t install Coin Heaven.app"

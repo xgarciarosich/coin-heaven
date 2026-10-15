@@ -1,0 +1,50 @@
+{
+  "$schema": "./region.schema.json",
+  "id": "us",
+  "name": "United States",
+  "country": "United States",
+  "locale": "en-US",
+  "currency": "USD",
+  "currencySymbol": "$",
+  "symbolFirst": true,
+
+  "investmentTax": {
+    "name": "Federal long-term capital gains",
+    "year": 2026,
+    "source": "irs.gov (Rev. Proc. 2025-32)",
+    "note": "Rates for a single filer, held more than a year. The bands are on your total taxable income, not on gains alone, so a large income pushes gains into the higher rates. State tax and the 3.8% surtax on high incomes are not included: correct the rates below if they apply to you.",
+    "bands": [
+      { "upTo": 49450, "rate": 0 },
+      { "upTo": 545500, "rate": 15 },
+      { "rate": 20 }
+    ]
+  },
+
+  "retirement": {
+    "pensionAge": 67,
+    "withdrawalRate": 4
+  },
+
+  "property": {
+    "purchaseTax": 0,
+    "mortgageShare": 80,
+    "mortgageRate": 6.5,
+    "mortgageYears": 30,
+    "otherPurchaseCosts": 3,
+    "maxDebtToIncome": 43,
+    "rentCountedByBank": 75,
+    "rentalProfitTax": 24,
+    "fixedCostsPerYear": 4500,
+    "agencyFee": 9,
+    "maintenance": 8
+  },
+
+  "merchantNoise": [
+    "pos", "debit", "credit", "purchase", "purchases", "payment", "payments", "card",
+    "checkcard", "visa", "mastercard", "authorized", "authorised", "recurring",
+    "online", "transfer", "withdrawal", "deposit", "ach", "ppd", "web", "ref",
+    "reference", "date", "from", "with", "for", "the", "and", "inc", "llc", "corp",
+    "store", "number", "checking", "savings", "account", "bank", "mobile", "atm",
+    "contactless", "invoice", "fee", "debit card", "sq", "tst", "paypal", "venmo", "zelle"
+  ]
+}
