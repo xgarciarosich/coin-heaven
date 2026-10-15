@@ -33,6 +33,7 @@
 //!
 //! The Tauri commands cannot be called without the runtime. Where a test needs
 //! a command's sequence it repeats its library calls, named after the command.
+#![cfg_attr(not(unix), allow(dead_code, unused_imports))]
 
 use argon2::{Algorithm, Argon2, Params, Version};
 use base64::Engine as _;

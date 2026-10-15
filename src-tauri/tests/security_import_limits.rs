@@ -1,4 +1,8 @@
-//! scratch: harness + probes (to be replaced by the real suite)
+//! Hostile statements and workbooks: what the importer does with files built to
+//! cause trouble. Each case runs in its own process so that an abort is a failed
+//! test and not a lost test run; workbooks go through the same separate-process
+//! reader the app uses.
+#![cfg_attr(not(unix), allow(dead_code, unused_imports))]
 use coin_heaven_lib::import::parser::{self, BankMapping, parse_amount};
 use coin_heaven_lib::import::{dates, pdf, sniff, table};
 use std::alloc::{GlobalAlloc, Layout, System};

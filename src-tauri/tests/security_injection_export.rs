@@ -25,6 +25,7 @@
 //! A test marked `#[ignore = "FINDING: ..."]` asserts the *correct* behaviour
 //! and currently fails: it is a defect, not a flaky test. Run them with
 //! `cargo test --test security_injection_export -- --ignored`.
+#![cfg_attr(not(unix), allow(dead_code, unused_imports))]
 
 use chrono::NaiveDate;
 use coin_heaven_lib::commands::autocat::{self, Assignment};
