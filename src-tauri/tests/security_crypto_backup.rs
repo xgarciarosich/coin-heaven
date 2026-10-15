@@ -2034,14 +2034,14 @@ fn common_passphrases_are_rated_as_very_weak_and_a_strong_one_is_not() {
         "        ",
     ] {
         let r = recovery::rate_passphrase(common);
-        assert!(r.score <= 1, "a common passphrase scored {}", r.score);
+        assert!(r.score <= 1, "a common passphrase rated too high");
         assert!(
             !r.message.is_empty(),
             "no advice is given for a common passphrase"
         );
     }
     let strong = recovery::rate_passphrase("seven purple lanterns drift");
-    assert!(strong.score >= 3, "score {}", strong.score);
+    assert!(strong.score >= 3, "a strong passphrase rated too low");
     assert!(strong.acceptable);
 }
 
@@ -2061,11 +2061,7 @@ fn a_common_or_blank_passphrase_is_not_acceptable() {
         "        ",
     ] {
         let r = recovery::rate_passphrase(common);
-        assert!(
-            !r.acceptable,
-            "a common passphrase is acceptable (score {})",
-            r.score
-        );
+        assert!(!r.acceptable, "a common passphrase is acceptable");
     }
 
     let w = World::new(None);
