@@ -1,6 +1,7 @@
 name: Release
 
-# Tag a version to build signed, notarised installers:
+# Tag a version to build installers (signed and notarised when the signing
+# secrets below are set, unsigned otherwise):
 #   git tag v1.0.0 && git push origin v1.0.0
 on:
   push:
@@ -69,19 +70,27 @@ jobs:
           tagName: ${{ github.ref_name }}
           releaseName: "Coin Heaven ${{ github.ref_name }}"
           releaseBody: |
-            Local-first wealth and real estate portfolio simulator.
+            Private personal finance on your own computer. Your data stays in an
+            encrypted file on your machine.
 
-            **macOS** — download the `.dmg` for your chip (Apple silicon =
-            aarch64, Intel = x86_64).
+            **macOS**: download the `.dmg` for your chip (Apple silicon is
+            `aarch64`, Intel is `x64`). These builds are not signed with a paid
+            Apple certificate, so macOS may say the app cannot be opened. Open
+            System Settings, then Privacy & Security, and choose **Open
+            Anyway**.
 
-            **Windows** — the installer is not signed with an EV certificate,
-            so SmartScreen shows a blue warning on first run. Click
-            **More info → Run anyway**. Full explanation and checksum
-            verification steps are in `docs/DISTRIBUTION.md`.
+            **Windows**: the installer is not signed with a paid certificate,
+            so SmartScreen shows a blue warning on first run. Choose **More
+            info**, then **Run anyway**.
 
-            Your data stays on your machine. Write down the recovery phrase
-            shown at first launch — without it a reset keychain means the
-            database cannot be opened.
+            Step-by-step help, including how to check a download, is in
+            `docs/GETTING-STARTED.md` and `docs/DISTRIBUTION.md`.
+
+            Write down the twelve recovery words shown at first launch. They
+            are the only way back in if you forget your passphrase or move to a
+            new computer, and nobody can reset them.
+
+            Not financial advice.
           releaseDraft: true
           prerelease: false
           args: ${{ matrix.args }}

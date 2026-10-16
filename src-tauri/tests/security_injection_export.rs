@@ -1545,7 +1545,11 @@ fn tree(root: &Path) -> BTreeSet<String> {
         for entry in std::fs::read_dir(dir).unwrap() {
             let entry = entry.unwrap();
             let rel = entry.path().strip_prefix(root).unwrap().to_owned();
-            out.insert(rel.to_string_lossy().into_owned());
+            // Always "/" between parts, so the same expectations hold on Windows.
+            out.insert(
+                rel.to_string_lossy()
+                    .replace(std::path::MAIN_SEPARATOR, "/"),
+            );
             if entry.file_type().unwrap().is_dir() {
                 walk(&entry.path(), root, out);
             }
