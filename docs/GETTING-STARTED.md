@@ -120,9 +120,8 @@ local model look up prices on the web, are in [LOCAL-AI.md](LOCAL-AI.md).
   folder, ideally on another disk or in a cloud-synced folder. Nothing is backed
   up until you do. After that an encrypted copy is written after each import and
   when you close the app, and the oldest copies are removed.
-- To move to a new computer: install Coin Heaven there, copy the newest backup
-  file (and `atlas.keyinfo` from the same folder) across, and enter your
-  passphrase or the twelve words.
+- To move to a new computer, or if one is lost or stolen, follow
+  [RECOVERY.md](RECOVERY.md).
 - **Settings → General → Your data, as files → Export to a folder…** writes
   your data as plain spreadsheet files. These are *not* encrypted, so keep them
   somewhere safe.

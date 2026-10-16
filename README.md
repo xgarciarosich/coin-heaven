@@ -111,6 +111,7 @@ very welcome.
 | | |
 |---|---|
 | [GETTING-STARTED.md](docs/GETTING-STARTED.md) | install and first steps, for everyone |
+| [RECOVERY.md](docs/RECOVERY.md) | moving to a new computer, and what to do if one is stolen |
 | [THREAT-MODEL.md](docs/THREAT-MODEL.md) | what is and is not protected |
 | [SECURITY-REVIEW.md](docs/SECURITY-REVIEW.md) | what was examined, what was fixed, what was accepted |
 | [LOCAL-AI.md](docs/LOCAL-AI.md) | running the assistant fully offline |
