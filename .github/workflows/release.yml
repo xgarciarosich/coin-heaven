@@ -49,9 +49,9 @@ jobs:
       - uses: tauri-apps/tauri-action@84b9d35b5fc46c1e45415bdb6144030364f7ebc5 # v0
         env:
           # ---- macOS code signing + notarisation -------------------------
-          # Set these as repository secrets. Without them the macOS build
-          # still succeeds but produces an UNSIGNED app that Gatekeeper will
-          # refuse to open normally — see docs/DISTRIBUTION.md.
+          # The builds are unsigned for now (an empty secret makes the bundler
+          # try to import an empty certificate and fail). To sign, add the
+          # variables below to this env block, each from a repository secret:
           #
           #   APPLE_CERTIFICATE          base64 of the .p12 Developer ID cert
           #   APPLE_CERTIFICATE_PASSWORD password for that .p12
@@ -59,12 +59,6 @@ jobs:
           #   APPLE_ID                   Apple account email
           #   APPLE_PASSWORD             app-specific password, NOT the account one
           #   APPLE_TEAM_ID              10-character team id
-          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
-          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
-          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tagName: ${{ github.ref_name }}
