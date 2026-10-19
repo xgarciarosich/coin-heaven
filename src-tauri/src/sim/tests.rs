@@ -16,6 +16,29 @@ fn flat(buy_month: u32, price: f64, rent: f64) -> PlannedProperty {
         mortgage_rate_bps: None,
         mortgage_term_months: None,
         fixed_costs_annual: None,
+        owned: None,
+    }
+}
+
+/// A flat bought before the plan, worth `value` today, with `owed` left on its
+/// loan over `months` more months.
+fn owned(value: f64, rent: f64, owed: f64, months: u32) -> PlannedProperty {
+    PlannedProperty {
+        name: "Home I let".into(),
+        buy_month: 1,
+        price: eur(value),
+        renovation: Money::ZERO,
+        monthly_rent: eur(rent),
+        transfer_tax_bps: 0,
+        financing_bps: None,
+        mortgage_rate_bps: Some(300),
+        mortgage_term_months: Some(months),
+        fixed_costs_annual: None,
+        owned: Some(OwnedSince {
+            bought_on: Some("2019-05".into()),
+            paid: Some(eur(150_000.0)),
+            loan_remaining: eur(owed),
+        }),
     }
 }
 
@@ -442,4 +465,95 @@ fn each_year_says_what_is_yours_in_each_property_and_it_adds_up() {
     assert!(r.years[5].property_equity[1] > Money::ZERO);
     // Paying the mortgage down and a rising market only add to what is yours.
     assert!(r.years[9].property_equity[0] > r.years[0].property_equity[0]);
+}
+
+/* ------------------------------------------------- already owned -- */
+
+#[test]
+fn a_property_already_owned_is_held_from_the_start_and_costs_nothing() {
+    let p = SimParams {
+        income_growth_bps: 0,
+        properties: vec![owned(200_000.0, 900.0, 80_000.0, 180)],
+        ..base()
+    };
+    let r = run(&p).unwrap();
+    let o = &r.properties[0];
+    assert_eq!(o.bought_month, Some(0), "owned before the plan begins");
+    assert!(o.blocked_by.is_none());
+    assert_eq!(o.cash_needed, Money::ZERO);
+
+    // Month one: the flat is there at today's value, its loan is owed, and no
+    // cash went on buying it. Cash = start + saving + the month's net rent.
+    let loan = Loan::new(eur(80_000.0), 300, 180);
+    let first_net_rent = r.properties[0].net_rent_first;
+    let expected_cash = p.start_cash + p.monthly_savings + first_net_rent;
+    let value_m1 = eur(200_000.0).mul_f64(index(p.appreciation_bps, 1)[1]);
+    let mut l = loan.clone();
+    l.advance_one_month();
+    let nw_m1 = expected_cash + value_m1 - l.balance;
+    assert_eq!(r.monthly_net_worth[0], nw_m1);
+    assert_eq!(r.years[0].properties, 1);
+    assert_eq!(r.years[0].purchases, 0, "owning is not buying");
+}
+
+#[test]
+fn a_paid_off_property_brings_rent_and_no_payment() {
+    let p = SimParams {
+        income_growth_bps: 0,
+        properties: vec![owned(150_000.0, 800.0, 0.0, 1)],
+        ..base()
+    };
+    let r = run(&p).unwrap();
+    assert_eq!(r.properties[0].debt_end, Money::ZERO);
+    assert!(r.properties[0].net_rent_first > Money::ZERO);
+    assert_eq!(r.years.last().unwrap().debt, Money::ZERO);
+}
+
+#[test]
+fn the_loan_on_a_property_already_owned_counts_when_the_bank_looks_at_the_next() {
+    // Same planned purchase, with and without a heavily mortgaged flat already
+    // held: the bank sees the existing payment, so capacity is lower.
+    let planned = flat(1, 120_000.0, 700.0);
+    let alone = run(&SimParams {
+        income_growth_bps: 0,
+        properties: vec![planned.clone()],
+        ..base()
+    })
+    .unwrap();
+    let with_owned = run(&SimParams {
+        income_growth_bps: 0,
+        properties: vec![owned(250_000.0, 0.0, 220_000.0, 240), planned],
+        ..base()
+    })
+    .unwrap();
+    assert!(with_owned.properties[1].dti_bps_planned > alone.properties[0].dti_bps_planned);
+}
+
+#[test]
+fn an_owned_property_needs_no_purchase_month_and_rejects_a_negative_loan() {
+    let mut p = owned(100_000.0, 500.0, 10_000.0, 60);
+    p.buy_month = 0;
+    assert!(
+        run(&SimParams {
+            properties: vec![p.clone()],
+            ..base()
+        })
+        .is_ok()
+    );
+    p.owned.as_mut().unwrap().loan_remaining = eur(-1.0);
+    assert!(
+        run(&SimParams {
+            properties: vec![p],
+            ..base()
+        })
+        .is_err()
+    );
+}
+
+#[test]
+fn a_scenario_saved_before_owned_properties_still_loads() {
+    let json = r#"{"name":"Old","buyMonth":3,"price":10000000,"renovation":0,
+        "monthlyRent":60000,"transferTaxBps":600}"#;
+    let p: PlannedProperty = serde_json::from_str(json).unwrap();
+    assert!(p.owned.is_none());
 }

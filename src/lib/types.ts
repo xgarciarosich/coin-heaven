@@ -23,6 +23,20 @@ export interface PlannedProperty {
   mortgageRateBps: number | null;
   mortgageTermMonths: number | null;
   fixedCostsAnnual: Minor | null;
+  /**
+   * Bought before the plan starts: held from the first month at `price` (its
+   * value today) and `monthlyRent` (today's rent), with the loan it still has.
+   * Its mortgage terms are the rate and the months left. `null` for a planned
+   * purchase.
+   */
+  owned?: OwnedSince | null;
+}
+
+export interface OwnedSince {
+  /** "YYYY-MM" */
+  boughtOn: string | null;
+  paid: Minor | null;
+  loanRemaining: Minor;
 }
 
 export interface SimParams {
@@ -909,7 +923,9 @@ export interface Suggestions {
 
 export interface Assignment {
   txnIds: number[];
-  categoryId: number;
+  /** null leaves the category to the event's default. */
+  categoryId: number | null;
+  eventId: number | null;
   createRule: boolean;
   key: string;
 }

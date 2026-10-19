@@ -59,6 +59,26 @@ pub struct PlannedProperty {
     /// IBI, insurance and community fees a year; `None` takes the general one.
     #[serde(default)]
     pub fixed_costs_annual: Option<Money>,
+    /// A property bought before the plan starts. It is held from the first
+    /// month: nothing is paid for it and the bank is not asked. Its `price` is
+    /// read as what it is worth today, `monthly_rent` as today's rent, and its
+    /// mortgage terms as the rate and the months left on the loan it has.
+    #[serde(default)]
+    pub owned: Option<OwnedSince>,
+}
+
+/// What is known about a property that is already owned.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OwnedSince {
+    /// When it was bought, "YYYY-MM". Shown, not computed with.
+    #[serde(default)]
+    pub bought_on: Option<String>,
+    /// What was paid for it, for the record and the gain since.
+    #[serde(default)]
+    pub paid: Option<Money>,
+    /// What is still owed on its mortgage today; zero when it is paid off.
+    pub loan_remaining: Money,
 }
 
 /// Everything the projection is run from.
@@ -231,8 +251,16 @@ impl SimParams {
             if p.monthly_rent.is_negative() {
                 bad("monthlyRent", "cannot be negative".into());
             }
-            if p.buy_month == 0 {
+            if p.buy_month == 0 && p.owned.is_none() {
                 bad("buyMonth", "a purchase is planned from month 1 on".into());
+            }
+            if let Some(o) = &p.owned {
+                if o.loan_remaining.is_negative() {
+                    bad("loanRemaining", "cannot be negative".into());
+                }
+                if o.paid.is_some_and(|v| v.is_negative()) {
+                    bad("paid", "cannot be negative".into());
+                }
             }
             if !(0..=3_000).contains(&p.transfer_tax_bps) {
                 bad("transferTaxBps", "must be between 0% and 30%".into());
@@ -262,8 +290,16 @@ impl SimParams {
         p.financing_bps.unwrap_or(self.financing_bps)
     }
 
-    /// The loan a purchase is made with.
+    /// The loan a purchase is made with — or, for a property already owned,
+    /// the loan it still carries, over the months left on it.
     pub fn loan_for(&self, p: &PlannedProperty) -> Loan {
+        if let Some(o) = &p.owned {
+            return Loan::new(
+                o.loan_remaining,
+                p.mortgage_rate_bps.unwrap_or(self.mortgage_rate_bps),
+                p.mortgage_term_months.unwrap_or(self.mortgage_term_months),
+            );
+        }
         Loan::new(
             p.price.mul_bps(self.financing(p)),
             p.mortgage_rate_bps.unwrap_or(self.mortgage_rate_bps),
@@ -274,6 +310,9 @@ impl SimParams {
     /// Cash needed at the notary for one purchase:
     /// deposit + transfer tax + other closing costs + renovation.
     pub fn cash_required(&self, p: &PlannedProperty) -> Money {
+        if p.owned.is_some() {
+            return Money::ZERO;
+        }
         let deposit = p.price.mul_bps(10_000 - self.financing(p));
         let itp = p.price.mul_bps(p.transfer_tax_bps);
         let other = p.price.mul_bps(self.other_closing_bps);
@@ -468,7 +507,9 @@ pub fn run(params: &SimParams) -> Result<SimResult, Vec<ParamError>> {
     let rent_idx = index(params.rent_cpi_bps, total_months);
 
     // Purchases are attempted in the order they were planned for.
-    let mut queue: Vec<usize> = (0..params.properties.len()).collect();
+    let mut queue: Vec<usize> = (0..params.properties.len())
+        .filter(|&i| params.properties[i].owned.is_none())
+        .collect();
     queue.sort_by_key(|&i| (params.properties[i].buy_month, i));
     let mut next = 0;
 
@@ -497,7 +538,25 @@ pub fn run(params: &SimParams) -> Result<SimResult, Vec<ParamError>> {
         .collect();
 
     let mut cash = params.start_cash;
+    // What is already owned is held from the start, at today's value and rent,
+    // with the loan it still has. It costs nothing and asks the bank nothing.
     let mut holdings: Vec<Holding> = Vec::new();
+    for (i, plan) in params.properties.iter().enumerate() {
+        if plan.owned.is_none() {
+            continue;
+        }
+        let mut holding = Holding {
+            plan: i,
+            purchased_month: 0,
+            base_value: plan.price,
+            base_monthly_rent: plan.monthly_rent,
+            fixed_costs_annual: plan.fixed_costs_annual.unwrap_or(params.fixed_costs_annual),
+            loan: params.loan_for(plan),
+        };
+        outcomes[i].bought_month = Some(0);
+        outcomes[i].net_rent_first = month_of(params, &mut holding, 1, &rent_idx, false).1;
+        holdings.push(holding);
+    }
     let mut years = Vec::with_capacity(params.horizon_years as usize);
     let mut monthly_net_worth = Vec::with_capacity(total_months as usize);
     let (mut year_savings, mut year_rent, mut year_purchases) = (Money::ZERO, Money::ZERO, 0u32);

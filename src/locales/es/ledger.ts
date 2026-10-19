@@ -89,6 +89,9 @@ export const ledger: Dict["ledger"] = {
   starts: "Empieza",
 
   autocat: {
+    hide: "Ocultar",
+    noEvent: "Sin evento",
+    event: "Evento",
     title: "Categorizar de golpe",
     coverage: (total, covered) => `${total} sin categoría · ${covered} con sugerencia`,
     rescan: "Analizar de nuevo",

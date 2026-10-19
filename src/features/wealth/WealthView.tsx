@@ -3,6 +3,9 @@ import {
   Area,
   AreaChart,
   CartesianGrid,
+  Cell,
+  Pie,
+  PieChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -21,6 +24,8 @@ import {
   TextField,
 } from "@/components/ui/controls";
 import { api } from "@/lib/ipc";
+import { move } from "@/lib/useReorder";
+import { Grip, Reorderable } from "@/components/ui/reorderable";
 import { fmtAxis, fmtCompact, fmtDecimal, fmtMajor, fmtMoney, minorToMajor } from "@/lib/money";
 import type { AssetClass, AssetKind, Snapshot } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -40,11 +45,17 @@ type SubTab = "balance" | "portfolio";
 
 const isManual = (l: { source?: string | null }) => !l.source || l.source === "manual";
 
+/** A complete date between 1900 and today, as a date field reports it. */
+function isWholeDate(d: string) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(d) && d >= "1900-01-01" && d <= today();
+}
+
 export function WealthView() {
   const t = useT();
   const [sub, setSub] = useState<SubTab>("balance");
   const [snapshots, setSnapshots] = useState<Snapshot[]>([]);
   const [classes, setClasses] = useState<AssetClass[]>([]);
+  const [itemOrder, setItemOrder] = useState<Record<string, string[]>>({});
   const [prompt, setPrompt] = useState<{ due: boolean; suggestedDate: string; label: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loaded, setLoaded] = useState(false);
@@ -57,11 +68,17 @@ export function WealthView() {
 
   const refresh = useCallback(
     () =>
-      Promise.all([api.snapshotList(), api.snapshotPrompt(), api.assetClassList()])
-        .then(([s, p, k]) => {
+      Promise.all([
+        api.snapshotList(),
+        api.snapshotPrompt(),
+        api.assetClassList(),
+        api.wealthItemOrder(),
+      ])
+        .then(([s, p, k, o]) => {
           setSnapshots(s);
           setPrompt(p);
           setClasses(k);
+          setItemOrder(o);
           setLoaded(true);
         })
         .catch((e: unknown) => setError(msg(e))),
@@ -370,6 +387,13 @@ export function WealthView() {
                 taken={snapshots.filter((s) => s.id !== shown.id).map((s) => s.takenOn)}
                 fresh={fresh?.date === shown.takenOn ? fresh : null}
                 classes={classes}
+                itemOrder={itemOrder}
+                onReorderClasses={(keys) =>
+                  api
+                    .assetClassReorder(keys)
+                    .then(refresh)
+                    .catch((e: unknown) => setError(msg(e)))
+                }
                 onSaved={(date) => {
                   // The sheet follows its date if the date itself was changed.
                   if (date !== shown.takenOn) setSelected(date);
@@ -383,6 +407,8 @@ export function WealthView() {
                 onError={setError}
               />
             )}
+
+            {shown && <Composition snapshot={shown} classes={classes} />}
           </>
         )}
       </div>
@@ -820,6 +846,8 @@ function BalanceSheet({
   taken,
   fresh,
   classes,
+  itemOrder,
+  onReorderClasses,
   onSaved,
   onDeleted,
   onError,
@@ -831,6 +859,9 @@ function BalanceSheet({
   taken: string[];
   fresh: { from: string | null } | null;
   classes: AssetClass[];
+  /** Item names in the order the person arranged them, per class. */
+  itemOrder: Record<string, string[]>;
+  onReorderClasses: (orderedKeys: string[]) => void;
   onSaved: (date: string) => void;
   onDeleted: () => void;
   onError: (m: string) => void;
@@ -853,9 +884,26 @@ function BalanceSheet({
     const others = known
       .filter((k) => !mine.some((r) => r.bucket === k.bucket && r.label === k.label))
       .map((k) => ({ key: nextKey++, ...k, gross: 0, debt: 0, orig: k.label as string | null }));
-    return [...mine, ...others].sort((a, b) => a.label.localeCompare(b.label));
+    // In the order the person dragged them into; anything new after that,
+    // alphabetically.
+    const place = (r: { bucket: string; label: string }) => {
+      const i = (itemOrder[r.bucket] ?? []).indexOf(r.label);
+      return i === -1 ? Number.MAX_SAFE_INTEGER : i;
+    };
+    return [...mine, ...others].sort(
+      (a, b) => place(a) - place(b) || a.label.localeCompare(b.label),
+    );
   });
+  // The classes in the order shown, moved live while a heading is dragged.
+  const [classOrder, setClassOrder] = useState(() => classes.map((c) => c.key));
+  useEffect(() => setClassOrder(classes.map((c) => c.key)), [classes]);
+  const classOrderNow = useRef(classOrder);
+  classOrderNow.current = classOrder;
   const [takenOn, setTakenOn] = useState(snapshot.takenOn);
+  // What is in the date box while it is being typed. A date field reports a
+  // value on every keystroke ("0002-03-14" on the way to "2026-03-14"), and
+  // saving each one moved the balance to a nonsense date and reset the box.
+  const [dateDraft, setDateDraft] = useState(snapshot.takenOn);
   const [confirming, setConfirming] = useState(false);
   const [state, setState] = useState<SaveState>("idle");
   // A date just made is there to be filled in; one being looked back at is
@@ -991,6 +1039,24 @@ function BalanceSheet({
     queue(0);
   };
 
+  /** Move one of `subset` (a part of `all`) and keep the rest where it is. */
+  const moveWithin = <T,>(all: T[], subset: T[], from: number, to: number) => {
+    const moved = move(subset, from, to);
+    let i = 0;
+    return all.map((x) => (subset.includes(x) ? moved[i++]! : x));
+  };
+  const moveClass = (keys: string[], from: number, to: number) =>
+    setClassOrder((order) => moveWithin(order, keys, from, to));
+  const moveItem = (bucket: string, from: number, to: number) =>
+    setRows((rs) => moveWithin(rs, rs.filter((r) => r.bucket === bucket), from, to));
+  const saveItemOrder = (bucket: string) => {
+    const labels = live.current.rows
+      .filter((r) => r.bucket === bucket)
+      .map((r) => r.label.trim())
+      .filter(Boolean);
+    api.wealthItemReorder(bucket, labels).catch((e: unknown) => onError(msg(e)));
+  };
+
   const prev = (bucket: string, label: string) =>
     before?.lines.find((l) => l.bucket === bucket && l.label === label) ?? null;
 
@@ -998,7 +1064,10 @@ function BalanceSheet({
 
   /* ---- the figures ----------------------------------------------------- */
 
-  const sections = classes.map((cls) => {
+  const ordered = classOrder
+    .map((k) => classes.find((c) => c.key === k))
+    .filter((c): c is AssetClass => c !== undefined);
+  const sections = ordered.map((cls) => {
     const mine = rows.filter((r) => r.bucket === cls.key);
     const theirs = auto.filter((l) => l.bucket === cls.key);
     const now =
@@ -1031,16 +1100,29 @@ function BalanceSheet({
     return (
       <div className="border-b border-rule last:border-b-0">
         <p className="eyebrow bg-paper-sunk/50 px-5 py-2">{title}</p>
-        {list.map(({ cls, mine, theirs, now: clsNow, then: clsThen, held }) => {
+        <Reorderable
+          keys={list.map((x) => x.cls.key)}
+          onMove={(from, to) => moveClass(list.map((x) => x.cls.key), from, to)}
+          onDrop={() => onReorderClasses(classOrderNow.current)}
+        >
+          {(key, _i, item, grip, dragging) => {
+          const { cls, mine, theirs, now: clsNow, then: clsThen, held } = list.find(
+            (x) => x.cls.key === key,
+          )!;
           const empty = mine.length === 0 && theirs.length === 0;
           const isOpen = open.has(cls.key);
           const liability = cls.kind === "liability";
           return (
-            <div key={cls.key} className="border-t border-rule/60">
+            <div
+              key={cls.key}
+              {...item}
+              className={cn("group/class border-t border-rule/60", dragging && "bg-brass-wash/30")}
+            >
               <Line
                 strong={held > 0}
                 label={
                   <div className="flex items-center gap-2 py-1.5">
+                    <Grip handle={grip} label={w.dragClass} className="-ml-4 group-hover/class:opacity-100" />
                     <button
                       type="button"
                       disabled={empty}
@@ -1136,14 +1218,26 @@ function BalanceSheet({
                     );
                   })}
 
-                  {mine.map((r) => {
+                  <Reorderable
+                    keys={mine.map((r) => r.key)}
+                    onMove={(from, to) => moveItem(cls.key, from, to)}
+                    onDrop={() => saveItemOrder(cls.key)}
+                  >
+                  {(rowKey, _j, rowItem, rowGrip, rowDragging) => {
+                    const r = mine.find((x) => x.key === rowKey)!;
                     const was = prev(r.bucket, r.orig ?? r.label);
                     const owedNow = r.gross + r.debt;
                     return (
-                      <div key={r.key}>
+                      <div
+                        key={r.key}
+                        {...rowItem}
+                        className={cn(rowDragging && "rounded-md bg-brass-wash/40")}
+                      >
                         <Line
                           indent
                           label={
+                            <div className="flex items-center gap-1">
+                            <Grip handle={rowGrip} label={w.dragItem} className="-ml-5" />
                             <input
                               value={r.label}
                               placeholder={cls.kind === "property" ? w.propertyPlaceholder : w.labelPlaceholder}
@@ -1157,6 +1251,7 @@ function BalanceSheet({
                               onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
                               className="w-full rounded-md border border-transparent bg-transparent px-2 py-1.5 text-[12.5px] text-ink outline-none transition-colors placeholder:text-ink-3 hover:border-rule focus:border-brass focus:bg-surface"
                             />
+                            </div>
                           }
                           was={was ? (liability ? was.grossValueMinor + was.debtMinor : was.grossValueMinor) : null}
                           now={liability ? owedNow : r.gross}
@@ -1186,12 +1281,14 @@ function BalanceSheet({
                         )}
                       </div>
                     );
-                  })}
+                  }}
+                  </Reorderable>
                 </div>
               )}
             </div>
           );
-        })}
+          }}
+        </Reorderable>
         <div className="border-t border-rule bg-paper-sunk/30">
           <Line
             strong
@@ -1220,15 +1317,23 @@ function BalanceSheet({
             <span className="text-[11px] text-ink-3">{w.date}</span>
             <input
               type="date"
-              value={takenOn}
+              value={dateDraft}
+              min="1900-01-01"
               max={today()}
               onChange={(e) => {
                 const d = e.currentTarget.value;
-                if (!d) return;
-                setTakenOn(d);
-                queue(0);
+                setDateDraft(d);
+                // Saved as soon as it is a whole, plausible date; the steps on
+                // the way there are left alone.
+                if (isWholeDate(d) && d !== takenOn) {
+                  setTakenOn(d);
+                  queue(600);
+                }
               }}
-              className="rounded-md border border-rule bg-surface px-2 py-1 text-[12px] text-ink outline-none focus:border-brass"
+              onBlur={() => {
+                if (!isWholeDate(dateDraft)) setDateDraft(takenOn);
+              }}
+              className="w-[9.5rem] shrink-0 rounded-md border border-rule bg-surface px-2 py-1 text-[12px] text-ink outline-none focus:border-brass"
             />
           </div>
         }
@@ -1317,6 +1422,113 @@ function BalanceSheet({
           </div>
         )}
       </div>
+    </Panel>
+  );
+}
+
+/* -------------------------------------------------------- composition -- */
+
+/**
+ * What the balance is made of, as shares of what is owned.
+ *
+ * Shares are of gross assets: a flat counts at its value and its loan sits on
+ * the other side of the sheet, so a mortgaged home does not vanish from the
+ * picture. Debts are said in words underneath rather than drawn as negative
+ * slices, which a pie cannot show.
+ */
+function Composition({ snapshot, classes }: { snapshot: Snapshot; classes: AssetClass[] }) {
+  const t = useT();
+  const w = t.wealth;
+  const [by, setBy] = useState<"item" | "class">("item");
+
+  const slices = useMemo(() => {
+    const owned = classes.filter((k) => k.kind !== "liability");
+    const lines = snapshot.lines.filter(
+      (l) => l.grossValueMinor > 0 && owned.some((k) => k.key === l.bucket),
+    );
+    const list =
+      by === "class"
+        ? owned.map((k) => ({
+            key: k.key,
+            name: k.name,
+            value: lines.filter((l) => l.bucket === k.key).reduce((a, l) => a + l.grossValueMinor, 0),
+            color: k.color ?? FALLBACK_COLOR,
+          }))
+        : lines.map((l, i) => ({
+            key: `${l.bucket}:${l.label}:${i}`,
+            name: l.label,
+            value: l.grossValueMinor,
+            color: ITEM_COLORS[i % ITEM_COLORS.length]!,
+          }));
+    return list.filter((x) => x.value > 0).sort((a, b) => b.value - a.value);
+  }, [snapshot, classes, by]);
+
+  const total = slices.reduce((a, x) => a + x.value, 0);
+  if (total <= 0) return null;
+  const share = (v: number) => `${((v / total) * 100).toFixed(v / total < 0.1 ? 1 : 0)} %`;
+
+  return (
+    <Panel>
+      <PanelHead
+        label={w.shareTitle}
+        aside={
+          <div className="w-48">
+            <Segmented
+              options={[
+                ["item", w.shareByItem],
+                ["class", w.shareByClass],
+              ]}
+              value={by}
+              onChange={setBy}
+            />
+          </div>
+        }
+      />
+      <PanelBody className="flex flex-wrap items-center gap-8">
+        <div className="relative size-[200px] shrink-0">
+          <ResponsiveContainer width="100%" height="100%">
+            <PieChart>
+              <Pie
+                data={slices}
+                dataKey="value"
+                nameKey="name"
+                innerRadius={62}
+                outerRadius={96}
+                paddingAngle={slices.length > 1 ? 1.5 : 0}
+                stroke="var(--surface)"
+                isAnimationActive={false}
+              >
+                {slices.map((x) => (
+                  <Cell key={x.key} fill={x.color} />
+                ))}
+              </Pie>
+              <Tooltip
+                contentStyle={TOOLTIP}
+                formatter={(v) => [`${fmtMoney(Number(v))} · ${share(Number(v))}`, ""]}
+              />
+            </PieChart>
+          </ResponsiveContainer>
+          <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+            <span className="eyebrow">{w.shareOwned}</span>
+            <span className="tnum mt-1 text-[15px] text-ink">{fmtCompact(total)}</span>
+          </div>
+        </div>
+        <ul className="min-w-[220px] flex-1 space-y-1.5">
+          {slices.map((x) => (
+            <li key={x.key} className="flex items-center gap-2.5 text-[12.5px]">
+              <span className="size-2.5 shrink-0 rounded-full" style={{ background: x.color }} />
+              <span className="min-w-0 flex-1 truncate text-ink-2">{x.name}</span>
+              <span className="tnum w-14 text-right text-ink">{share(x.value)}</span>
+              <span className="tnum w-28 text-right text-ink-3">{fmtMoney(x.value)}</span>
+            </li>
+          ))}
+          {snapshot.totalDebtMinor > 0 && (
+            <li className="pt-2 text-[11.5px] leading-[1.6] text-ink-3">
+              {w.shareDebtNote(fmtMoney(snapshot.totalDebtMinor))}
+            </li>
+          )}
+        </ul>
+      </PanelBody>
     </Panel>
   );
 }

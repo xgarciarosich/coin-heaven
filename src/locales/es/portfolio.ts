@@ -3,6 +3,7 @@ import type { Dict } from "../en";
 const s = (n: number) => (n === 1 ? "" : "s");
 
 export const portfolio: Dict["portfolio"] = {
+  drag: "Arrastra para reordenar esta inversión",
   tabs: { portfolio: "Cartera" },
   market: {
     title: "Hay compras sin precio",

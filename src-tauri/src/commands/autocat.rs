@@ -310,7 +310,12 @@ pub struct Assignment {
     /// The exact rows the user saw. Sending ids rather than the merchant key
     /// means the set cannot drift between the preview and the decision.
     pub txn_ids: Vec<i64>,
-    pub category_id: i64,
+    /// The category to file them under; `None` leaves the category to the
+    /// event's default, when an event is given.
+    pub category_id: Option<i64>,
+    /// An event (a trip, a renovation) to put the whole bundle in.
+    #[serde(default)]
+    pub event_id: Option<i64>,
     /// Also write a rule, so next month's import needs no decision at all.
     pub create_rule: bool,
     pub key: String,
@@ -340,30 +345,57 @@ pub fn autocat_apply(
         let mut rules_created = 0;
 
         for a in &assignments {
-            let exists: i64 = tx.query_row(
-                "SELECT count(*) FROM pl_category WHERE id = ?1",
-                rusqlite::params![a.category_id],
-                |r| r.get(0),
-            )?;
-            if exists == 0 {
-                return Err(AppError::Invalid(
-                    "that category no longer exists — reload and try again".into(),
-                ));
+            if a.category_id.is_none() && a.event_id.is_none() {
+                continue;
+            }
+            if let Some(cat) = a.category_id {
+                let exists: i64 = tx.query_row(
+                    "SELECT count(*) FROM pl_category WHERE id = ?1",
+                    rusqlite::params![cat],
+                    |r| r.get(0),
+                )?;
+                if exists == 0 {
+                    return Err(AppError::Invalid(
+                        "that category no longer exists — reload and try again".into(),
+                    ));
+                }
+            }
+            if let Some(ev) = a.event_id {
+                let exists: i64 = tx.query_row(
+                    "SELECT count(*) FROM project_event WHERE id = ?1",
+                    rusqlite::params![ev],
+                    |r| r.get(0),
+                )?;
+                if exists == 0 {
+                    return Err(AppError::Invalid(
+                        "that event no longer exists — reload and try again".into(),
+                    ));
+                }
             }
             for id in &a.txn_ids {
+                // Each part is set only when it was chosen, so an event alone
+                // leaves the category to the event's default, and a category
+                // alone leaves any event the row already has.
                 categorised += tx.execute(
-                    "UPDATE txn SET category_override_id = ?1, categorized_by = 'rule',
-                            needs_review = 0 WHERE id = ?2",
-                    rusqlite::params![a.category_id, id],
+                    "UPDATE txn SET
+                        category_override_id = COALESCE(?1, category_override_id),
+                        categorized_by = CASE WHEN ?1 IS NULL THEN categorized_by ELSE 'rule' END,
+                        project_id = COALESCE(?2, project_id),
+                        needs_review = 0
+                     WHERE id = ?3",
+                    rusqlite::params![a.category_id, a.event_id, id],
                 )?;
             }
+            let Some(category_id) = a.category_id else {
+                continue;
+            };
             if a.create_rule && !a.key.trim().is_empty() {
                 // A rule the user already has covers this; a second one would
                 // only be another line to read.
                 let dup: i64 = tx.query_row(
                     "SELECT count(*) FROM categorization_rule
                      WHERE match_kind = 'contains' AND pattern = ?1 AND set_category_id = ?2",
-                    rusqlite::params![a.key.trim(), a.category_id],
+                    rusqlite::params![a.key.trim(), category_id],
                     |r| r.get(0),
                 )?;
                 if dup == 0 {
@@ -377,7 +409,7 @@ pub fn autocat_apply(
                                 format!("Todo lo que mencione «{}»", a.key.trim()),
                             ),
                             a.key.trim(),
-                            a.category_id
+                            category_id
                         ],
                     )?;
                     rules_created += 1;

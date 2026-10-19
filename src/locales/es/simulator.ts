@@ -8,12 +8,21 @@ export const simulator: Dict["simulator"] = {
   netWorthIn: (y) => `de patrimonio dentro de ${y} años`,
   story: (bought, planned, rent, capacity) =>
     `Salen ${bought} de las ${planned} compra${s(planned)} que has planeado. Al final te dejan ${rent} al mes de cash flow, una vez pagado todo, así que podrías ahorrar ${capacity} al mes.`,
+  storyOwnedOnly: (rent, capacity) =>
+    `Con lo que ya tienes y sin comprar nada más, al final te deja ${rent} al mes después de todos los gastos, así que podrías ahorrar ${capacity} al mes.`,
   storyEmpty: "Aún no has planeado ninguna compra, así que esto es solo lo que ahorras. Añade un inmueble y verás qué pasaría.",
   adjust: "Añade un inmueble y pon tus cifras para montar un plan.",
   cannotSimulate: "Con estas cifras no se puede simular",
 
   yourPurchases: "Los inmuebles que piensas comprar",
   addProperty: "Añadir inmueble",
+  addOwned: "Añadir uno que ya tienes",
+  addOwnedHint: "Un inmueble que compraste antes de este plan: cuenta desde hoy, con su valor de hoy y la hipoteca que le queda.",
+  ownedBadge: "Ya es tuyo",
+  ownedSince: "Comprado en",
+  verdictOwned: (equity) => `Tuyo desde el principio: hoy te pertenecen ${equity}, descontada la hipoteca.`,
+  factOwedNow: "Pendiente",
+  factGain: "Ganancia desde la compra",
   noPurchases: "Tú decides qué comprar y cuándo. Añade un inmueble con su precio, su alquiler y el mes en que lo comprarías, y Coin Heaven te dice si el efectivo y el banco lo permiten y cuánto te deja cada mes.",
   propertyName: (n) => `Inmueble ${n}: ponle nombre`,
   buyIn: "comprar en",
@@ -60,6 +69,10 @@ export const simulator: Dict["simulator"] = {
   },
   moods: { cautious: "Prudente", base: "Normal", hopeful: "Optimista" },
   fields: {
+    worthToday: "Vale hoy",
+    paid: "Lo que pagaste",
+    loanRemaining: "Pendiente de la hipoteca",
+    yearsLeft: "Años que le quedan a la hipoteca",
     startCash: "Efectivo que tienes hoy",
     monthlySavings: "Lo que ahorras al mes",
     netMonthlySalary: "Tu sueldo neto al mes",
@@ -88,6 +101,8 @@ export const simulator: Dict["simulator"] = {
     properties: "Compras",
   },
   notes: {
+    ownedNoRent: "Déjalo en cero si vives en él.",
+    loanRemaining: "Cero si ya está pagado. El tipo y los años que quedan van en las condiciones de abajo.",
     savings: "Lo que sale de tu sueldo. El cash flow del alquiler se suma solo.",
     salary: "El banco compara tus cuotas con esto.",
     growth: "Lo que ahorras sube a la vez.",

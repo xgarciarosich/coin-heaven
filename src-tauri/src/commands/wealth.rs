@@ -437,11 +437,20 @@ pub fn wealth_line_rename(
         return Err(AppError::Invalid("an item needs a name".into()));
     }
     let n = state.db()?.with(|c| {
-        Ok(c.execute(
+        let n = c.execute(
             "UPDATE wealth_line SET label = ?1
              WHERE bucket = ?2 AND label = ?3 AND source = 'manual'",
             rusqlite::params![to, bucket, from],
-        )?)
+        )?;
+        // The item keeps its place in the order under its new name.
+        let mut order = item_order(c)?;
+        if let Some(list) = order.get_mut(&bucket) {
+            for l in list.iter_mut().filter(|l| **l == from) {
+                l.clone_from(&to);
+            }
+            save_item_order(c, &order)?;
+        }
+        Ok(n)
     })?;
     state.backup.mark_dirty();
     Ok(n)
@@ -727,4 +736,75 @@ pub fn ledger_suggestion(
 pub fn fire_ledger_suggestion(state: State<'_, AppState>) -> AppResult<LedgerSuggestion> {
     let today = chrono::Local::now().date_naive();
     state.db()?.with(|c| ledger_suggestion(c, today))
+}
+
+/* --------------------------------------------------------- item order -- */
+
+const ITEM_ORDER: &str = "wealth.item_order";
+
+/// The order items are shown in under each asset class, by name. An item is
+/// one thing on every date (the flat is one flat), so its place is too.
+pub fn item_order(
+    c: &rusqlite::Connection,
+) -> AppResult<std::collections::BTreeMap<String, Vec<String>>> {
+    let raw: Option<String> = c
+        .query_row(
+            "SELECT value_json FROM app_setting WHERE key = ?1",
+            [ITEM_ORDER],
+            |r| r.get(0),
+        )
+        .ok();
+    Ok(raw
+        .and_then(|j| serde_json::from_str(&j).ok())
+        .unwrap_or_default())
+}
+
+fn save_item_order(
+    c: &rusqlite::Connection,
+    order: &std::collections::BTreeMap<String, Vec<String>>,
+) -> AppResult<()> {
+    let json = serde_json::to_string(order)
+        .map_err(|e| AppError::Other(format!("cannot encode the item order: {e}")))?;
+    c.execute(
+        "INSERT INTO app_setting (key, value_json) VALUES (?1, ?2)
+         ON CONFLICT(key) DO UPDATE SET value_json = excluded.value_json,
+             updated_at = strftime('%Y-%m-%dT%H:%M:%SZ','now')",
+        rusqlite::params![ITEM_ORDER, json],
+    )?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn wealth_item_order(
+    state: State<'_, AppState>,
+) -> AppResult<std::collections::BTreeMap<String, Vec<String>>> {
+    state.db()?.with(item_order)
+}
+
+/// Record the order of the items under one class.
+#[tauri::command]
+pub fn wealth_item_reorder(
+    state: State<'_, AppState>,
+    bucket: String,
+    labels: Vec<String>,
+) -> AppResult<()> {
+    state.db()?.with(|c| set_item_order(c, &bucket, labels))?;
+    state.backup.mark_dirty();
+    Ok(())
+}
+
+pub fn set_item_order(
+    c: &rusqlite::Connection,
+    bucket: &str,
+    labels: Vec<String>,
+) -> AppResult<()> {
+    let mut order = item_order(c)?;
+    let mut seen = std::collections::HashSet::new();
+    let labels: Vec<String> = labels
+        .into_iter()
+        .map(|l| l.trim().to_string())
+        .filter(|l| !l.is_empty() && seen.insert(l.clone()))
+        .collect();
+    order.insert(bucket.to_string(), labels);
+    save_item_order(c, &order)
 }

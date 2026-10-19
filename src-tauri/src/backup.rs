@@ -371,7 +371,7 @@ mod tests {
             .with(|c| Ok(c.query_row("SELECT name FROM account", [], |r| r.get(0))?))
             .unwrap();
         assert_eq!(name, "Backup Canary Account");
-        assert_eq!(restored.schema_version().unwrap(), 17);
+        assert_eq!(restored.schema_version().unwrap(), 19);
     }
 
     #[test]

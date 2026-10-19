@@ -1052,7 +1052,8 @@ fn a_key_sent_from_the_webview_is_stored_as_the_text_it_is() {
         b.st(),
         vec![Assignment {
             txn_ids: vec![txn],
-            category_id: housing,
+            category_id: Some(housing),
+            event_id: None,
             create_rule: true,
             key: key.into(),
         }],
@@ -2559,4 +2560,97 @@ fn removing_one_leg_of_a_transfer_leaves_no_half_a_pair_behind() {
         [],
     );
     assert_eq!(lonely, 0, "a transfer group with a single member is left");
+}
+
+/* ------------------------------------------------- bulk filing with events -- */
+
+#[test]
+fn a_bundle_can_be_put_in_an_event_with_or_without_a_category() {
+    let b = Book::new();
+    let acct = account(&b, "Main");
+    import(
+        b.db(),
+        acct,
+        "trip.csv",
+        vec![
+            row("2026-07-01", "HOTEL LISBOA", -30_000),
+            row("2026-07-02", "HOTEL LISBOA", -30_000),
+            row("2026-07-03", "TAXI LISBOA", -2_500),
+        ],
+    );
+    let travel = category(b.db(), "Leisure & travel");
+    let groceries = category(b.db(), "Food & groceries");
+    exec(
+        b.db(),
+        "INSERT INTO project_event (name, default_category_id) VALUES ('Lisbon trip', ?1)",
+        [travel],
+    );
+    let event: i64 = one(b.db(), "SELECT id FROM project_event", []);
+    let hotel = ids(
+        b.db(),
+        "SELECT id FROM txn WHERE description_raw = 'HOTEL LISBOA'",
+    );
+    let taxi = id_of(b.db(), "TAXI LISBOA", acct);
+
+    let out = autocat::autocat_apply(
+        b.st(),
+        vec![
+            // Event only: the category comes from the event.
+            Assignment {
+                txn_ids: hotel.iter().copied().collect(),
+                category_id: None,
+                event_id: Some(event),
+                create_rule: true,
+                key: "hotel".into(),
+            },
+            // Both: the chosen category wins over the event's.
+            Assignment {
+                txn_ids: vec![taxi],
+                category_id: Some(groceries),
+                event_id: Some(event),
+                create_rule: false,
+                key: "taxi".into(),
+            },
+        ],
+    )
+    .unwrap();
+    assert_eq!(out.categorised, 3);
+    assert_eq!(
+        out.rules_created, 0,
+        "no rule without a category to point at"
+    );
+
+    for id in &hotel {
+        let (project, effective): (Option<i64>, Option<i64>) = b
+            .db()
+            .with(|c| {
+                Ok(c.query_row(
+                    "SELECT project_id, effective_category_id FROM v_txn_effective WHERE id = ?1",
+                    [id],
+                    |r| Ok((r.get(0)?, r.get(1)?)),
+                )?)
+            })
+            .unwrap();
+        assert_eq!((project, effective), (Some(event), Some(travel)));
+    }
+    let taxi_cat: Option<i64> = one(
+        b.db(),
+        "SELECT effective_category_id FROM v_txn_effective WHERE id = ?1",
+        [taxi],
+    );
+    assert_eq!(taxi_cat, Some(groceries));
+
+    // A missing event is refused before anything is written.
+    let refused = autocat::autocat_apply(
+        b.st(),
+        vec![Assignment {
+            txn_ids: vec![taxi],
+            category_id: None,
+            event_id: Some(9_999),
+            create_rule: false,
+            key: "x".into(),
+        }],
+    );
+    assert!(refused.is_err());
+    b.assert_intact();
 }

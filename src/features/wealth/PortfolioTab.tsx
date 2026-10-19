@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { MarketLookup } from "./MarketLookup";
 import {
   Area,
@@ -14,6 +14,8 @@ import { AlertTriangle, Check, ChevronDown, ExternalLink, Plus, Search, Trash2, 
 import { Panel, PanelBody, PanelHead } from "@/components/ui/panel";
 import { Banner, Button, Empty, SelectField, TextField } from "@/components/ui/controls";
 import { api } from "@/lib/ipc";
+import { move, useReorder } from "@/lib/useReorder";
+import { Grip } from "@/components/ui/reorderable";
 import { useT } from "@/lib/i18n";
 import { fmtAxis, fmtBps, fmtMoney, fmtMoneyExact, majorToMinor, minorToMajor, sym } from "@/lib/money";
 import { fmtDate, region } from "@/lib/region";
@@ -74,6 +76,18 @@ export function PortfolioTab({
   const t = useT();
   const p = t.portfolio;
   const [view, setView] = useState<PortfolioView | null>(null);
+  // Holdings in the order shown, moved live while one is dragged.
+  const [order, setOrder] = useState<number[]>([]);
+  useEffect(() => setOrder(view ? view.holdings.map((h) => h.id) : []), [view]);
+  const orderNow = useRef(order);
+  orderNow.current = order;
+  const reorder = useReorder<number, HTMLTableSectionElement>(
+    order,
+    (from, to) => setOrder((o) => move(o, from, to)),
+    () => {
+      api.holdingReorder(orderNow.current).catch((e: unknown) => setError(msg(e)));
+    },
+  );
   const [history, setHistory] = useState<HistoryPoint[]>([]);
   const [open, setOpen] = useState<number | null>(null);
   const [adding, setAdding] = useState(false);
@@ -267,10 +281,23 @@ export function PortfolioTab({
                     ))}
                   </tr>
                 </thead>
-                <tbody>
-                  {view.holdings.map((h) => (
+                <tbody
+                  {...reorder.listProps}
+                  className={cn(reorder.dragging !== null && "cursor-grabbing select-none")}
+                >
+                  {order
+                    .map((id) => view.holdings.find((h) => h.id === id))
+                    .filter((h): h is HoldingView => h !== undefined)
+                    .map((h) => (
                     <Fragment key={h.id}>
-                      <HoldingRow h={h} open={open === h.id} onToggle={() => setOpen(open === h.id ? null : h.id)} />
+                      <HoldingRow
+                        h={h}
+                        open={open === h.id}
+                        onToggle={() => setOpen(open === h.id ? null : h.id)}
+                        item={reorder.itemProps}
+                        grip={reorder.handleProps(h.id)}
+                        dragging={reorder.dragging === h.id}
+                      />
                       {open === h.id && (
                         <tr className="border-b border-rule bg-brass-wash/25">
                           <td colSpan={8} className="px-5 py-4">
@@ -459,15 +486,35 @@ function Stat({
   );
 }
 
-function HoldingRow({ h, open, onToggle }: { h: HoldingView; open: boolean; onToggle: () => void }) {
+function HoldingRow({
+  h,
+  open,
+  onToggle,
+  item,
+  grip,
+  dragging,
+}: {
+  h: HoldingView;
+  open: boolean;
+  onToggle: () => void;
+  item: { "data-reorder-item": string };
+  grip: ReturnType<ReturnType<typeof useReorder>["handleProps"]>;
+  dragging: boolean;
+}) {
   const p = useT().portfolio;
   return (
     <tr
-      className={cn("cursor-pointer border-b border-rule/60 transition-colors hover:bg-surface-hi", open && "bg-surface-hi")}
+      {...item}
+      className={cn(
+        "group cursor-pointer border-b border-rule/60 transition-colors hover:bg-surface-hi",
+        open && "bg-surface-hi",
+        dragging && "bg-brass-wash/40",
+      )}
       onClick={onToggle}
     >
-      <td className="py-2 pr-3 pl-5">
+      <td className="py-2 pr-3 pl-2">
         <div className="flex items-center gap-2">
+          <Grip handle={grip} label={p.drag} />
           <ChevronDown
             className={cn("size-3.5 shrink-0 text-ink-3 transition-transform", !open && "-rotate-90")}
             strokeWidth={1.75}

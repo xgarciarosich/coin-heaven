@@ -251,7 +251,8 @@ pub fn portfolio_at(c: &Connection, as_of: NaiveDate) -> AppResult<PortfolioView
     materialise(c, today())?;
     let heads: Vec<(i64, String, Option<String>, String)> = {
         let mut st = c.prepare(
-            "SELECT id, name, symbol, asset_class FROM holding WHERE is_archived = 0 ORDER BY name",
+            "SELECT id, name, symbol, asset_class FROM holding WHERE is_archived = 0
+             ORDER BY sort_order, name",
         )?;
         st.query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)))?
             .collect::<Result<_, _>>()?
@@ -851,4 +852,24 @@ pub fn portfolio_gain_share(state: State<'_, AppState>) -> AppResult<Option<i64>
     let pv = state.db()?.with(|c| portfolio_at(c, today()))?;
     Ok((pv.value.minor() > 0 && pv.unpriced.is_empty())
         .then(|| (pv.gain.minor().max(0) * 10_000 / pv.value.minor()).min(10_000)))
+}
+
+/// Keep holdings in the order the person dragged them into.
+#[tauri::command]
+pub fn holding_reorder(state: State<'_, AppState>, ordered_ids: Vec<i64>) -> AppResult<()> {
+    state.db()?.with(|c| reorder_holdings(c, &ordered_ids))?;
+    state.backup.mark_dirty();
+    Ok(())
+}
+
+pub fn reorder_holdings(c: &Connection, ordered_ids: &[i64]) -> AppResult<()> {
+    let tx = c.unchecked_transaction()?;
+    for (i, id) in ordered_ids.iter().enumerate() {
+        tx.execute(
+            "UPDATE holding SET sort_order = ?1 WHERE id = ?2",
+            params![(i as i64 + 1) * 10, id],
+        )?;
+    }
+    tx.commit()?;
+    Ok(())
 }

@@ -334,6 +334,11 @@ export const api = {
   wealthLineRename: (bucket: string, from: string, to: string) =>
     call<number>("wealth_line_rename", { bucket, from, to }),
   snapshotPrompt: () => call<SnapshotPrompt>("snapshot_prompt"),
+  /** The order items are shown in under each asset class, by name. */
+  wealthItemOrder: () => call<Record<string, string[]>>("wealth_item_order"),
+  wealthItemReorder: (bucket: string, labels: string[]) =>
+    call<void>("wealth_item_reorder", { bucket, labels }),
+  holdingReorder: (orderedIds: number[]) => call<void>("holding_reorder", { orderedIds }),
   fireView: (params: FireParams | null) =>
     call<FireView>("fire_view", { params }),
 

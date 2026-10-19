@@ -1,6 +1,7 @@
 const s = (n: number) => (n === 1 ? "" : "s");
 
 export const portfolio = {
+  drag: "Drag to reorder this holding",
   tabs: { portfolio: "Portfolio" },
   market: {
     title: "Some buys have no price",

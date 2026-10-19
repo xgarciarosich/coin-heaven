@@ -87,6 +87,9 @@ export const ledger = {
   starts: "Starts",
 
   autocat: {
+    hide: "Hide",
+    noEvent: "No event",
+    event: "Event",
     title: "Pre-assign categories",
     coverage: (total: number, covered: number) =>
       `${total} uncategorised · ${covered} covered by a suggestion`,

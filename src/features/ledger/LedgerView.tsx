@@ -415,7 +415,12 @@ export function LedgerView({ modules }: { modules: ModuleToggles | null }) {
             )}
 
             {tidying && (
-              <AutoCategorise categories={categories} onApplied={refreshAll} />
+              <AutoCategorise
+                categories={categories}
+                events={events.filter((e) => !e.isClosed)}
+                onApplied={refreshAll}
+                onHide={() => setTidying(false)}
+              />
             )}
 
             <Panel>

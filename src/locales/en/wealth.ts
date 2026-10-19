@@ -1,6 +1,13 @@
 const s = (n: number) => (n === 1 ? "" : "s");
 
 export const wealth = {
+  dragClass: "Drag to reorder this class",
+  shareTitle: "What you own, by share",
+  shareByItem: "By item",
+  shareByClass: "By class",
+  shareOwned: "Owned",
+  shareDebtNote: (d: string) => `Shares are of what you own. You also owe ${d}, which is not in the chart.`,
+  dragItem: "Drag to reorder this item",
   title: "Net worth",
   lede: "Write down what you own and what you owe, and Coin Heaven keeps the total and how it moves. Come back whenever something has changed — twice a year is plenty.",
   tabs: { balance: "Balance", classes: "Asset classes" },

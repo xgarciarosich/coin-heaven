@@ -133,6 +133,22 @@ per-year overrides. That answered "how many could I own?", which is not what
 anyone plans a purchase around; scenarios saved by it still load, with an
 empty plan.
 
+## Properties you already own
+
+A property bought before the plan is held from the first month. Nothing is paid
+for it and the bank's test is not run, because it already happened.
+
+- Its value starts at what it is worth **today** and grows with the same
+  appreciation index as everything else, from month 0.
+- Its rent starts at **today's** rent and is indexed the same way.
+- Its loan is the amount **still owed**, repaid over the **months left** at its
+  own rate (or the general rate if none is given), with the same annuity
+  formula as a new mortgage. A paid-off property has no loan.
+- Its loan payment counts in the affordability test for every later purchase,
+  as a lender would see it.
+- What was paid for it and when are recorded for the "gain since you bought"
+  figure only; they do not change the projection.
+
 ## Income
 
 Take-home pay and the monthly amount put aside both rise once a year by

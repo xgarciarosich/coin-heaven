@@ -91,6 +91,17 @@ const mockFlat = (name: string, buyMonth: number, price: number, rent: number) =
   financingBps: null, mortgageRateBps: null, mortgageTermMonths: null, fixedCostsAnnual: null,
 });
 
+/** Asset classes, kept so a reorder in dev mode survives a refresh. */
+const mockClasses = [
+    { key: "cash", name: "Cash", kind: "liquid", color: "#94a3b8", sortOrder: 10, countsFire: true, lineCount: 4 },
+    { key: "equities", name: "Equities", kind: "liquid", color: "#22c55e", sortOrder: 20, countsFire: true, lineCount: 4 },
+    { key: "crypto", name: "Crypto", kind: "liquid", color: "#a855f7", sortOrder: 30, countsFire: true, lineCount: 2 },
+    { key: "pension", name: "Pension", kind: "liquid", color: "#3b82f6", sortOrder: 40, countsFire: true, lineCount: 4 },
+    { key: "real_estate", name: "Real estate", kind: "property", color: "#d97706", sortOrder: 50, countsFire: false, lineCount: 4 },
+    { key: "business", name: "Business stake", kind: "other_asset", color: "#0ea5e9", sortOrder: 60, countsFire: false, lineCount: 2 },
+    { key: "other_debt", name: "Other debt", kind: "liability", color: "#f87171", sortOrder: 80, countsFire: false, lineCount: 1 },
+];
+
 export const mockParams: SimParams = {
   horizonYears: 10,
   startMonth: null,
@@ -128,11 +139,18 @@ export const mockParams: SimParams = {
  */
 function fakeRun(p: SimParams): SimResult {
   const months = p.horizonYears * 12;
-  const order = p.properties.map((_, i) => i).sort(
+  const order = p.properties.map((_, i) => i).filter((i) => !p.properties[i]!.owned).sort(
     (a, b) => p.properties[a]!.buyMonth - p.properties[b]!.buyMonth,
   );
   const terms = (i: number) => {
     const f = p.properties[i]!;
+    if (f.owned) {
+      const loan = f.owned.loanRemaining;
+      const r = (f.mortgageRateBps ?? p.mortgageRateBps) / 10_000 / 12;
+      const n = f.mortgageTermMonths ?? p.mortgageTermMonths;
+      const pay = loan === 0 ? 0 : r === 0 ? loan / n : (loan * r) / (1 - Math.pow(1 + r, -n));
+      return { loan, r, pay, need: 0 };
+    }
     const ltv = f.financingBps ?? p.financingBps;
     const loan = (f.price * ltv) / 10_000;
     const r = (f.mortgageRateBps ?? p.mortgageRateBps) / 10_000 / 12;
@@ -158,6 +176,11 @@ function fakeRun(p: SimParams): SimResult {
   const years: YearRow[] = [];
   const monthly: number[] = [];
   let [ySave, yRent, yBuys] = [0, 0, 0];
+  p.properties.forEach((f, i) => {
+    if (!f.owned) return;
+    held.push({ i, debt: f.owned.loanRemaining, value: f.price, rent: f.monthlyRent });
+    outcomes[i]!.boughtMonth = 0;
+  });
 
   const netOf = (h: (typeof held)[number]) => {
     const got = (h.rent * p.occupancyBps) / 10_000;
@@ -698,19 +721,20 @@ export const mockResponses: Record<string, (args?: never) => unknown> = {
     ],
   }),
   autocat_apply: () => ({ categorised: 35, rulesCreated: 1 }),
-  asset_class_list: () => [
-    { key: "cash", name: "Cash", kind: "liquid", color: "#94a3b8", sortOrder: 10, countsFire: true, lineCount: 4 },
-    { key: "equities", name: "Equities", kind: "liquid", color: "#22c55e", sortOrder: 20, countsFire: true, lineCount: 4 },
-    { key: "crypto", name: "Crypto", kind: "liquid", color: "#a855f7", sortOrder: 30, countsFire: true, lineCount: 2 },
-    { key: "pension", name: "Pension", kind: "liquid", color: "#3b82f6", sortOrder: 40, countsFire: true, lineCount: 4 },
-    { key: "real_estate", name: "Real estate", kind: "property", color: "#d97706", sortOrder: 50, countsFire: false, lineCount: 4 },
-    { key: "business", name: "Business stake", kind: "other_asset", color: "#0ea5e9", sortOrder: 60, countsFire: false, lineCount: 2 },
-    { key: "other_debt", name: "Other debt", kind: "liability", color: "#f87171", sortOrder: 80, countsFire: false, lineCount: 1 },
-  ],
+  asset_class_list: () => [...mockClasses].sort((a, b) => a.sortOrder - b.sortOrder),
   asset_class_save: () => "business",
   asset_class_delete: () => undefined,
   wealth_line_rename: () => 3,
-  asset_class_reorder: () => undefined,
+  asset_class_reorder: (a: unknown) => {
+    const { orderedKeys } = a as { orderedKeys: string[] };
+    orderedKeys.forEach((k, i) => {
+      const c = mockClasses.find((x) => x.key === k);
+      if (c) c.sortOrder = (i + 1) * 10;
+    });
+  },
+  wealth_item_order: () => ({}),
+  wealth_item_reorder: () => undefined,
+  holding_reorder: () => undefined,
   fire_params_save: () => undefined,
   fire_ledger_suggestion: () => ({
     from: "2025-09-01", to: "2026-08-31", monthsWithData: 12,

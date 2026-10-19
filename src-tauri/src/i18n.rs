@@ -101,6 +101,14 @@ const CATALOGUE: &[(&str, &str)] = &[
     ),
     ("key info is missing", "faltan los datos de la clave"),
     (
+        "cannot encode the item order: {}",
+        "no se puede guardar el orden de los elementos: {}",
+    ),
+    (
+        "that event no longer exists — reload and try again",
+        "ese evento ya no existe; vuelve a cargar e inténtalo de nuevo",
+    ),
+    (
         "this sheet holds far more than a statement can",
         "esta hoja contiene muchísimo más de lo que cabe en un extracto",
     ),

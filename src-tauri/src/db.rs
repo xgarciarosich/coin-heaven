@@ -40,6 +40,10 @@ static MIGRATIONS: Lazy<Migrations<'static>> = Lazy::new(|| {
         M::up(include_str!(
             "../migrations/0017_deletes_leave_no_half_links.sql"
         )),
+        M::up(include_str!(
+            "../migrations/0018_neutral_categories_are_not_income_or_spending.sql"
+        )),
+        M::up(include_str!("../migrations/0019_holding_order.sql")),
     ])
 });
 
@@ -201,7 +205,7 @@ mod tests {
         let path = dir.path().join("atlas.db");
 
         let db = Db::open(&path, &test_key()).unwrap();
-        assert_eq!(db.schema_version().unwrap(), 17);
+        assert_eq!(db.schema_version().unwrap(), 19);
         let cats: i64 = db
             .with(|c| Ok(c.query_row("SELECT count(*) FROM pl_category", [], |r| r.get(0))?))
             .unwrap();
@@ -414,6 +418,44 @@ mod tests {
             )?;
             let rows: i64 = c.query_row("SELECT count(*) FROM v_txn_net", [], |r| r.get(0))?;
             assert_eq!(rows, 0, "neutralised transfers must not reach the P&L");
+            Ok(())
+        })
+        .unwrap();
+    }
+
+    #[test]
+    fn neutral_categories_are_neither_income_nor_spending() {
+        // Filing a movement under "Internal transfer" or "Investment flow"
+        // must keep it out of every figure, exactly as marking it a transfer does.
+        let dir = tempfile::tempdir().unwrap();
+        let db = Db::open(&dir.path().join("atlas.db"), &test_key()).unwrap();
+        db.with(|c| {
+            c.execute(
+                "INSERT INTO account (name, kind) VALUES ('A','checking')",
+                [],
+            )?;
+            let neutral = |name: &str| -> rusqlite::Result<i64> {
+                c.query_row(
+                    "SELECT id FROM pl_category WHERE name = ?1 AND kind = 'neutral'",
+                    [name],
+                    |r| r.get(0),
+                )
+            };
+            let (transfer, invest) = (neutral("Internal transfer")?, neutral("Investment flow")?);
+            c.execute(
+                "INSERT INTO txn (account_id, booked_on, amount_minor, description_raw,
+                                  description_norm, dedupe_hash, category_override_id)
+                 VALUES (1, '2026-03-01', -40000, 'TO SAVINGS', 'to savings', 'n1', ?1),
+                        (1, '2026-03-02', -25000, 'BROKER',     'broker',     'n2', ?2),
+                        (1, '2026-03-03', -1200,  'BAKERY',     'bakery',     'n3', NULL)",
+                [transfer, invest],
+            )?;
+            let (rows, total): (i64, i64) = c.query_row(
+                "SELECT count(*), COALESCE(SUM(net_minor), 0) FROM v_txn_net",
+                [],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )?;
+            assert_eq!((rows, total), (1, -1200), "only the bakery is spending");
             Ok(())
         })
         .unwrap();

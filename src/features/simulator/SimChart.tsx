@@ -70,8 +70,14 @@ export function SimChart({
       });
       return r;
     };
-    // Year 0 is today: the cash in hand and nothing bought.
-    const today = row(0, params.startCash, [], 0);
+    // Year 0 is today: the cash in hand, and what is already owned at its
+    // value less its loan.
+    const today = row(
+      0,
+      params.startCash,
+      params.properties.map((f) => (f.owned ? f.price - f.owned.loanRemaining : 0)),
+      0,
+    );
     return [today, ...years.map((y) => row(y.year, y.cash, y.propertyEquity ?? [], y.netRentMonthly))];
   }, [years, params.properties, params.startCash]);
 
@@ -79,7 +85,10 @@ export function SimChart({
   const ticks = Array.from({ length: horizon + 1 }, (_, i) => i).filter(
     (i) => horizon <= 12 || i % 2 === 0 || i === horizon,
   );
-  const bought = (result?.properties ?? []).filter((o) => o.boughtMonth !== null);
+  // A property owned before the plan has no purchase to mark.
+  const bought = (result?.properties ?? []).filter(
+    (o) => o.boughtMonth !== null && o.boughtMonth > 0,
+  );
 
   const common = {
     type: "number" as const,
@@ -178,7 +187,11 @@ export function SimChart({
                 </span>
                 {name(i)}
                 <span className="text-ink-3">
-                  {owned ? m.boughtIn(when(o!.boughtMonth!)) : m.notBought}
+                  {o?.boughtMonth === 0
+                    ? m.ownedBadge
+                    : owned
+                      ? m.boughtIn(when(o!.boughtMonth!))
+                      : m.notBought}
                 </span>
                 {owned && last && (
                   <span className="tnum text-ink-3">· {fmtMoney(last.propertyEquity?.[i] ?? 0)}</span>

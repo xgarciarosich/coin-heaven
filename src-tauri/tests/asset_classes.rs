@@ -198,3 +198,51 @@ fn a_snapshot_line_cannot_name_a_class_that_does_not_exist() {
     });
     assert!(bad.unwrap().is_err(), "the foreign key should refuse it");
 }
+
+#[test]
+fn holdings_and_items_keep_the_order_they_are_dragged_into() {
+    use coin_heaven_lib::commands::portfolio::{portfolio_at, reorder_holdings};
+    use coin_heaven_lib::commands::wealth::{item_order, set_item_order};
+
+    let (_dir, db) = book();
+    db.with(|c| {
+        for name in ["Bitcoin", "Apple", "World ETF"] {
+            c.execute(
+                "INSERT INTO holding (name, asset_class) VALUES (?1, 'equities')",
+                params![name],
+            )?;
+        }
+        let id = |n: &str| -> rusqlite::Result<i64> {
+            c.query_row("SELECT id FROM holding WHERE name = ?1", [n], |r| r.get(0))
+        };
+        let today = chrono::Local::now().date_naive();
+        let names = |c: &rusqlite::Connection| -> Vec<String> {
+            portfolio_at(c, today)
+                .unwrap()
+                .holdings
+                .into_iter()
+                .map(|h| h.name)
+                .collect()
+        };
+        // New holdings come in alphabetically ...
+        assert_eq!(names(c), ["Apple", "Bitcoin", "World ETF"]);
+        // ... and then in the order they are dragged into.
+        reorder_holdings(c, &[id("World ETF")?, id("Apple")?, id("Bitcoin")?])?;
+        assert_eq!(names(c), ["World ETF", "Apple", "Bitcoin"]);
+
+        // Items under a class: duplicates and blanks are dropped.
+        set_item_order(
+            c,
+            "cash",
+            vec![
+                "Savings".into(),
+                " Current ".into(),
+                "".into(),
+                "Savings".into(),
+            ],
+        )?;
+        assert_eq!(item_order(c)?["cash"], ["Savings", "Current"]);
+        Ok(())
+    })
+    .unwrap();
+}

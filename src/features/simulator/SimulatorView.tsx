@@ -113,9 +113,9 @@ export function SimulatorView({ initial }: { initial: SimParams }) {
     setP((prev) => {
       // A new one starts as a copy of the last, a year later: the next flat
       // is usually like the previous one, and never in the same month.
-      const last = prev.properties.at(-1);
+      const last = prev.properties.filter((x) => !x.owned).at(-1);
       const next: PlannedProperty = last
-        ? { ...last, name: "", buyMonth: last.buyMonth + 12 }
+        ? { ...last, name: "", buyMonth: last.buyMonth + 12, owned: null }
         : {
             name: "",
             buyMonth: 6,
@@ -127,8 +127,32 @@ export function SimulatorView({ initial }: { initial: SimParams }) {
             mortgageRateBps: null,
             mortgageTermMonths: null,
             fixedCostsAnnual: null,
+            owned: null,
           };
       return { ...prev, properties: [...prev.properties, next] };
+    });
+  // One already owned goes first: it is there before anything is bought.
+  const addOwned = () =>
+    setP((prev) => {
+      const owned: PlannedProperty = {
+        name: "",
+        buyMonth: 1,
+        price: 20_000_000,
+        renovation: 0,
+        monthlyRent: 90_000,
+        transferTaxBps: 0,
+        financingBps: null,
+        mortgageRateBps: null,
+        mortgageTermMonths: null,
+        fixedCostsAnnual: null,
+        owned: { boughtOn: null, paid: null, loanRemaining: 0 },
+      };
+      const firstPlanned = prev.properties.findIndex((x) => !x.owned);
+      const at = firstPlanned === -1 ? prev.properties.length : firstPlanned;
+      return {
+        ...prev,
+        properties: [...prev.properties.slice(0, at), owned, ...prev.properties.slice(at)],
+      };
     });
 
   const mood =
@@ -137,7 +161,9 @@ export function SimulatorView({ initial }: { initial: SimParams }) {
     ) ?? null;
 
   const last = result?.years.at(-1);
-  const planned = p.properties.length;
+  // What is already owned is not a purchase: the story counts only the plan.
+  const ownedCount = p.properties.filter((f) => f.owned).length;
+  const planned = p.properties.length - ownedCount;
 
   return (
     <div className="flex h-full">
@@ -158,10 +184,15 @@ export function SimulatorView({ initial }: { initial: SimParams }) {
 
           <p className="mt-3 max-w-2xl text-[13px] leading-[1.65] text-ink-2">
             {result
-              ? planned === 0
+              ? planned === 0 && ownedCount === 0
                 ? m.storyEmpty
-                : m.story(
-                    result.finalProperties,
+                : planned === 0
+                  ? m.storyOwnedOnly(
+                      fmtMoney(result.finalNetRentMonthly),
+                      fmtMoney(result.finalSavingCapacity),
+                    )
+                  : m.story(
+                    result.finalProperties - ownedCount,
                     planned,
                     fmtMoney(result.finalNetRentMonthly),
                     fmtMoney(result.finalSavingCapacity),
@@ -192,13 +223,19 @@ export function SimulatorView({ initial }: { initial: SimParams }) {
             <PanelHead
               label={m.yourPurchases}
               aside={
-                <Button variant="primary" onClick={addProperty}>
-                  <Plus className="size-3.5" strokeWidth={2} />
-                  {m.addProperty}
-                </Button>
+                <div className="flex items-center gap-2">
+                  <Button onClick={addOwned} title={m.addOwnedHint}>
+                    <Home className="size-3.5" strokeWidth={1.75} />
+                    {m.addOwned}
+                  </Button>
+                  <Button variant="primary" onClick={addProperty}>
+                    <Plus className="size-3.5" strokeWidth={2} />
+                    {m.addProperty}
+                  </Button>
+                </div>
               }
             />
-            {planned === 0 ? (
+            {p.properties.length === 0 ? (
               <PanelBody>
                 <p className="text-[12.5px] leading-[1.65] text-ink-2">{m.noPurchases}</p>
               </PanelBody>
@@ -496,6 +533,9 @@ function PropertyCard({
   };
   const yieldBps = f.price > 0 ? Math.round((f.monthlyRent * 12 * 10_000) / f.price) : 0;
   const delayed = o?.boughtMonth != null && o.boughtMonth > o.plannedMonth;
+  const owned = f.owned ?? null;
+  const setOwned = (patch: Partial<NonNullable<PlannedProperty["owned"]>>) =>
+    owned && onChange({ owned: { ...owned, ...patch } });
 
   const select =
     "appearance-none rounded-md border border-rule bg-surface px-2 py-1.5 text-[12.5px] text-ink outline-none focus:border-brass";
@@ -512,35 +552,54 @@ function PropertyCard({
           onChange={(e) => onChange({ name: e.currentTarget.value })}
           className="min-w-0 flex-1 rounded-md border border-transparent bg-transparent px-2 py-1 text-[14px] text-ink outline-none transition-colors placeholder:text-ink-3 hover:border-rule focus:border-brass focus:bg-surface"
         />
+        {owned ? (
+          <>
+            <span className="rounded bg-positive/10 px-1.5 py-0.5 text-[11px] text-positive">
+              {m.ownedBadge}
+            </span>
+            <span className="text-[11.5px] text-ink-3">{m.ownedSince}</span>
+            <input
+              type="month"
+              aria-label={m.ownedSince}
+              max={start}
+              value={owned.boughtOn ?? ""}
+              onChange={(e) => setOwned({ boughtOn: e.currentTarget.value || null })}
+              className={select}
+            />
+          </>
+        ) : (
+          <>
         <span className="text-[11.5px] text-ink-3">{m.buyIn}</span>
-        <select
-          aria-label={m.buyMonth}
-          className={select}
-          value={when.month}
-          onChange={(e) =>
-            onChange({ buyMonth: planMonth(start, when.year, Number(e.currentTarget.value)) })
-          }
-        >
-          {t.common.monthsLong.map((name, i) => (
-            <option key={name} value={i + 1}>
-              {name}
-            </option>
-          ))}
-        </select>
-        <select
-          aria-label={m.buyYear}
-          className={select}
-          value={when.year}
-          onChange={(e) =>
-            onChange({ buyMonth: planMonth(start, Number(e.currentTarget.value), when.month) })
-          }
-        >
-          {Array.from({ length: params.horizonYears + 1 }, (_, i) => firstYear + i).map((y) => (
-            <option key={y} value={y}>
-              {y}
-            </option>
-          ))}
-        </select>
+          <select
+            aria-label={m.buyMonth}
+            className={select}
+            value={when.month}
+            onChange={(e) =>
+              onChange({ buyMonth: planMonth(start, when.year, Number(e.currentTarget.value)) })
+            }
+          >
+            {t.common.monthsLong.map((name, i) => (
+              <option key={name} value={i + 1}>
+                {name}
+              </option>
+            ))}
+          </select>
+          <select
+            aria-label={m.buyYear}
+            className={select}
+            value={when.year}
+            onChange={(e) =>
+              onChange({ buyMonth: planMonth(start, Number(e.currentTarget.value), when.month) })
+            }
+          >
+            {Array.from({ length: params.horizonYears + 1 }, (_, i) => firstYear + i).map((y) => (
+              <option key={y} value={y}>
+                {y}
+              </option>
+            ))}
+          </select>
+          </>
+        )}
         <button
           type="button"
           onClick={onRemove}
@@ -552,6 +611,37 @@ function PropertyCard({
         </button>
       </div>
 
+      {owned ? (
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <Num
+            label={m.fields.worthToday}
+            suffix={sym()}
+            value={minorToMajor(f.price)}
+            onChange={(v) => onChange({ price: majorToMinor(v ?? 0) })}
+          />
+          <Num
+            label={m.fields.paid}
+            suffix={sym()}
+            optional
+            value={owned.paid === null ? null : minorToMajor(owned.paid)}
+            onChange={(v) => setOwned({ paid: v === null ? null : majorToMinor(v) })}
+          />
+          <Num
+            label={m.fields.monthlyRent}
+            suffix={sym()}
+            value={minorToMajor(f.monthlyRent)}
+            onChange={(v) => onChange({ monthlyRent: majorToMinor(v ?? 0) })}
+            hint={f.monthlyRent > 0 ? m.yieldOf(fmtBps(yieldBps, 1)) : m.notes.ownedNoRent}
+          />
+          <Num
+            label={m.fields.loanRemaining}
+            suffix={sym()}
+            value={minorToMajor(owned.loanRemaining)}
+            onChange={(v) => setOwned({ loanRemaining: majorToMinor(v ?? 0) })}
+            hint={m.notes.loanRemaining}
+          />
+        </div>
+      ) : (
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Num
           label={m.fields.propertyPrice}
@@ -581,6 +671,7 @@ function PropertyCard({
           hint={m.notes.transferTax}
         />
       </div>
+      )}
 
       <button
         type="button"
@@ -595,6 +686,7 @@ function PropertyCard({
       </button>
       {terms && (
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          {!owned && (
           <Num
             label={m.fields.financingBps}
             suffix="%"
@@ -603,6 +695,7 @@ function PropertyCard({
             placeholder={String(params.financingBps / 100)}
             onChange={(v) => onChange({ financingBps: v === null ? null : Math.round(v * 100) })}
           />
+          )}
           <Num
             label={m.fields.mortgageRateBps}
             suffix="%"
@@ -613,7 +706,7 @@ function PropertyCard({
             onChange={(v) => onChange({ mortgageRateBps: v === null ? null : Math.round(v * 100) })}
           />
           <Num
-            label={m.fields.mortgageYears}
+            label={owned ? m.fields.yearsLeft : m.fields.mortgageYears}
             optional
             value={f.mortgageTermMonths === null ? null : f.mortgageTermMonths / 12}
             placeholder={String(params.mortgageTermMonths / 12)}
@@ -633,7 +726,30 @@ function PropertyCard({
         </div>
       )}
 
-      {o && (
+      {o && owned && (
+        <div className="rounded-md border border-positive/30 bg-positive/[0.06] px-3.5 py-3">
+          <p className="flex items-center gap-1.5 text-[12.5px] font-medium text-positive">
+            <Check className="size-3.5" strokeWidth={2} />
+            {m.verdictOwned(fmtMoney(f.price - owned.loanRemaining))}
+          </p>
+          <div className="mt-2.5 grid grid-cols-2 gap-x-6 gap-y-1.5 lg:grid-cols-4">
+            <Fact label={m.factOwedNow} value={fmtMoney(owned.loanRemaining)} />
+            <Fact label={m.factPayment} value={m.perMonth(fmtMoney(o.monthlyPayment))} />
+            <Fact
+              label={m.factKeep}
+              value={m.perMonth(fmtMoney(o.netRentFirst))}
+              tone={o.netRentFirst < 0 ? "negative" : undefined}
+            />
+            <Fact
+              label={m.factGain}
+              value={owned.paid === null ? "—" : fmtMoney(f.price - owned.paid)}
+              tone={owned.paid !== null && f.price < owned.paid ? "negative" : undefined}
+            />
+          </div>
+        </div>
+      )}
+
+      {o && !owned && (
         <div
           className={cn(
             "rounded-md border px-3.5 py-3",

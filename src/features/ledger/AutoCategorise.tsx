@@ -7,6 +7,7 @@ import { fmtBps, fmtMoney } from "@/lib/money";
 import type {
   Category,
   EgressPreview,
+  EventItem,
   MerchantSuggestion,
   SuggestedGroup,
   Suggestions,
@@ -34,10 +35,15 @@ const msg = (e: unknown) => (e instanceof Error ? e.message : String(e));
  */
 export function AutoCategorise({
   categories,
+  events,
   onApplied,
+  onHide,
 }: {
   categories: Category[];
+  /** Open events a bundle can be put in. */
+  events: EventItem[];
   onApplied: () => void;
+  onHide: () => void;
 }) {
   const t = useT();
   const [data, setData] = useState<Suggestions | null>(null);
@@ -45,6 +51,7 @@ export function AutoCategorise({
   const [error, setError] = useState<string | null>(null);
   const [note, setNote] = useState<string | null>(null);
   const [choice, setChoice] = useState<Record<string, number | null>>({});
+  const [eventChoice, setEventChoice] = useState<Record<string, number | null>>({});
   const [rules, setRules] = useState<Record<string, boolean>>({});
   const [open, setOpen] = useState<string | null>(null);
   const [preview, setPreview] = useState<EgressPreview | null>(null);
@@ -67,6 +74,7 @@ export function AutoCategorise({
             s.groups.map((g) => [g.key, g.source !== "rule" && g.txnCount > 1]),
           ),
         );
+        setEventChoice({});
       })
       .catch((e: unknown) => setError(msg(e)))
       .finally(() => setBusy(false));
@@ -75,8 +83,9 @@ export function AutoCategorise({
   useEffect(load, [load]);
 
   const ready = useMemo(
-    () => (data?.groups ?? []).filter((g) => choice[g.key] != null),
-    [data, choice],
+    () =>
+      (data?.groups ?? []).filter((g) => choice[g.key] != null || eventChoice[g.key] != null),
+    [data, choice, eventChoice],
   );
   const readyTxns = useMemo(
     () => ready.reduce((n, g) => n + g.txnCount, 0),
@@ -115,8 +124,10 @@ export function AutoCategorise({
       .autocatApply(
         ready.map((g) => ({
           txnIds: g.txnIds,
-          categoryId: choice[g.key]!,
-          createRule: rules[g.key] ?? false,
+          categoryId: choice[g.key] ?? null,
+          eventId: eventChoice[g.key] ?? null,
+          // A rule needs a category to point at.
+          createRule: choice[g.key] != null && (rules[g.key] ?? false),
           key: g.key,
         })),
       )
@@ -162,6 +173,10 @@ export function AutoCategorise({
             <Button variant="primary" onClick={apply} disabled={busy || ready.length === 0}>
               <Check className="size-3.5" strokeWidth={2} />
               {t.ledger.autocat.apply(readyTxns)}
+            </Button>
+            <Button variant="ghost" onClick={onHide} title={t.ledger.autocat.hide}>
+              <X className="size-3.5" strokeWidth={1.75} />
+              {t.ledger.autocat.hide}
             </Button>
           </div>
         }
@@ -220,8 +235,11 @@ export function AutoCategorise({
               key={g.key}
               group={g}
               categories={categories}
+              events={events}
               ai={byAi[g.key] ?? null}
               value={choice[g.key] ?? null}
+              eventValue={eventChoice[g.key] ?? null}
+              onEventChange={(v) => setEventChoice((c) => ({ ...c, [g.key]: v }))}
               createRule={rules[g.key] ?? false}
               expanded={open === g.key}
               onToggleExpand={() => setOpen(open === g.key ? null : g.key)}
@@ -238,8 +256,11 @@ export function AutoCategorise({
 function Group({
   group: g,
   categories,
+  events,
   ai,
   value,
+  eventValue,
+  onEventChange,
   createRule,
   expanded,
   onToggleExpand,
@@ -248,8 +269,11 @@ function Group({
 }: {
   group: SuggestedGroup;
   categories: Category[];
+  events: EventItem[];
   ai: MerchantSuggestion | null;
   value: number | null;
+  eventValue: number | null;
+  onEventChange: (v: number | null) => void;
   createRule: boolean;
   expanded: boolean;
   onToggleExpand: () => void;
@@ -258,7 +282,7 @@ function Group({
 }) {
   const t = useT();
   return (
-    <div className={cn("px-5 py-3", value == null && "opacity-70")}>
+    <div className={cn("px-5 py-3", value == null && eventValue == null && "opacity-70")}>
       <div className="flex flex-wrap items-center gap-3">
         <button
           type="button"
@@ -309,6 +333,24 @@ function Group({
             </option>
           ))}
         </SelectField>
+
+        {events.length > 0 && (
+          <SelectField
+            value={eventValue ?? ""}
+            className="w-40 shrink-0"
+            aria-label={t.ledger.autocat.event}
+            onChange={(e) =>
+              onEventChange(e.currentTarget.value ? Number(e.currentTarget.value) : null)
+            }
+          >
+            <option value="">{t.ledger.autocat.noEvent}</option>
+            {events.map((ev) => (
+              <option key={ev.id} value={ev.id}>
+                {ev.name}
+              </option>
+            ))}
+          </SelectField>
+        )}
 
         <label
           className={cn(

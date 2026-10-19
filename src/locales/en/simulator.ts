@@ -6,12 +6,21 @@ export const simulator = {
   netWorthIn: (y: number) => `net worth in ${y} years`,
   story: (bought: number, planned: number, rent: string, capacity: string) =>
     `${bought} of the ${planned} purchase${s(planned)} you planned go through. By the end they leave you ${rent} a month after every cost, so you could put aside ${capacity} a month.`,
+  storyOwnedOnly: (rent: string, capacity: string) =>
+    `With what you already own and nothing new bought, it leaves you ${rent} a month after every cost by the end, so you could put aside ${capacity} a month.`,
   storyEmpty: "No purchases planned yet, so this is your savings on their own. Add a property to see what it would do.",
   adjust: "Add a property and set your numbers to build a plan.",
   cannotSimulate: "These numbers cannot be simulated",
 
   yourPurchases: "The properties you plan to buy",
   addProperty: "Add a property",
+  addOwned: "Add one you own",
+  addOwnedHint: "A property you bought before this plan: it counts from today, at today's value, with the loan it still has.",
+  ownedBadge: "Already yours",
+  ownedSince: "Bought in",
+  verdictOwned: (equity: string) => `Yours from the start — ${equity} of it is yours today, after the loan.`,
+  factOwedNow: "Still owed",
+  factGain: "Gain since you bought",
   noPurchases: "You decide what to buy and when. Add a property with its price, its rent and the month you would buy it, and this tells you whether the cash and the bank allow it — and what it leaves you each month.",
   propertyName: (n: number) => `Property ${n} — give it a name`,
   buyIn: "buy in",
@@ -58,6 +67,10 @@ export const simulator = {
   },
   moods: { cautious: "Cautious", base: "Normal", hopeful: "Hopeful" },
   fields: {
+    worthToday: "Worth today",
+    paid: "What you paid",
+    loanRemaining: "Still owed on the loan",
+    yearsLeft: "Years left on the loan",
     startCash: "Cash you have today",
     monthlySavings: "You put aside each month",
     netMonthlySalary: "Your take-home pay a month",
@@ -86,6 +99,8 @@ export const simulator = {
     properties: "Purchases",
   },
   notes: {
+    ownedNoRent: "Leave it at zero if you live in it.",
+    loanRemaining: "Zero if it is paid off. The rate and years left are under the loan terms below.",
     savings: "From your pay. Rent you keep is added on top automatically.",
     salary: "The bank compares your loan payments with this.",
     growth: "What you put aside rises with it.",

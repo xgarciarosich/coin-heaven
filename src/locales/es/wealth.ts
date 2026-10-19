@@ -3,6 +3,13 @@ import type { Dict } from "../en";
 const s = (n: number) => (n === 1 ? "" : "s");
 
 export const wealth: Dict["wealth"] = {
+  dragClass: "Arrastra para reordenar esta clase",
+  shareTitle: "Lo que tienes, en porcentaje",
+  shareByItem: "Por elemento",
+  shareByClass: "Por clase",
+  shareOwned: "Tienes",
+  shareDebtNote: (d: string) => `Los porcentajes son sobre lo que tienes. Además debes ${d}, que no aparece en el gráfico.`,
+  dragItem: "Arrastra para reordenar este elemento",
   title: "Patrimonio",
   lede: "Apunta lo que tienes y lo que debes, y Coin Heaven se encarga del total y de cómo evoluciona. Vuelve cuando cambie algo; con un par de veces al año basta.",
   tabs: { balance: "Balance", classes: "Clases de activo" },
