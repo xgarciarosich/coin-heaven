@@ -1,7 +1,7 @@
 {
   "name": "coin-heaven",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.1.0",
   "type": "module",
   "description": "Local-first, offline, encrypted personal wealth and real estate portfolio simulator.",
   "license": "MIT",
