@@ -20,6 +20,7 @@ fn item(kind: &str, name: &str, minor: i64) -> PlanItem {
         kind: kind.into(),
         name: name.into(),
         amount_minor: minor,
+        owner: "shared".into(),
     }
 }
 
@@ -171,4 +172,74 @@ fn names_are_trimmed_and_may_be_empty() {
     let p = &db.with(plan::list).unwrap()[0];
     assert_eq!(p.items[0].name, "Gym");
     assert_eq!(p.items[1].name, "");
+}
+
+#[test]
+fn a_plan_for_two_keeps_who_each_box_belongs_to_and_how_they_split() {
+    let (_d, db) = book();
+    let mine = |kind: &str, name: &str, minor: i64, owner: &str| PlanItem {
+        owner: owner.into(),
+        ..item(kind, name, minor)
+    };
+    db.with(|c| {
+        plan::save(
+            c,
+            "2026-11",
+            &[
+                mine("income", "Ana's salary", 300_000, "a"),
+                mine("income", "Ben's salary", 200_000, "b"),
+                mine("expense", "Rent", 120_000, "shared"),
+                mine("expense", "Gym", 4_000, "b"),
+            ],
+        )?;
+        plan::save_setup(
+            c,
+            "2026-11",
+            &plan::PlanSetup {
+                mode: "couple".into(),
+                person_a: " Ana ".into(),
+                person_b: "Ben".into(),
+                split: "income".into(),
+            },
+        )
+    })
+    .unwrap();
+    let p = &db.with(plan::list).unwrap()[0];
+    assert_eq!(p.setup.mode, "couple");
+    assert_eq!(
+        (p.setup.person_a.as_str(), p.setup.person_b.as_str()),
+        ("Ana", "Ben")
+    );
+    assert_eq!(p.setup.split, "income");
+    let owners: Vec<&str> = p.items.iter().map(|i| i.owner.as_str()).collect();
+    assert_eq!(owners, ["a", "b", "shared", "b"]);
+    // Totals are the household's, whoever pays.
+    assert_eq!(p.net_minor.minor(), 500_000 - 124_000);
+
+    // A new month starts as a plan for one, and nonsense is refused.
+    db.with(|c| plan::save(c, "2026-12", &[])).unwrap();
+    assert_eq!(
+        db.with(plan::list).unwrap()[1].setup,
+        plan::PlanSetup::default()
+    );
+    let bad = db.with(|c| plan::save(c, "2026-12", &[mine("income", "x", 1, "c")]));
+    assert!(bad.is_err());
+    let bad_setup = db.with(|c| {
+        plan::save_setup(
+            c,
+            "2026-12",
+            &plan::PlanSetup {
+                split: "random".into(),
+                ..plan::PlanSetup::default()
+            },
+        )
+    });
+    assert!(bad_setup.is_err());
+}
+
+#[test]
+fn a_box_saved_by_an_older_version_without_an_owner_is_shared() {
+    let json = r#"{"kind":"income","name":"Pay","amountMinor":100}"#;
+    let it: PlanItem = serde_json::from_str(json).unwrap();
+    assert_eq!(it.owner, "shared");
 }

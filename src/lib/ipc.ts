@@ -52,6 +52,7 @@ import type {
   SampleStatus,
   UpdateInfo,
   PlanItem,
+  PlanSetup,
   BudgetSeed,
   CashflowSummary,
   Matrix,
@@ -305,7 +306,8 @@ export const api = {
   /** One request to the project's public release page. Opt-in. */
   updateCheck: () => call<UpdateInfo>("update_check"),
   /** Replaces the month's boxes; the array's order is the order kept. */
-  planSave: (period: string, items: PlanItem[]) => call<void>("plan_save", { period, items }),
+  planSave: (period: string, items: PlanItem[], setup?: PlanSetup) =>
+    call<void>("plan_save", { period, items, setup: setup ?? null }),
   planDelete: (period: string) => call<void>("plan_delete", { period }),
 
   budgetPlan: (year: number) => call<BudgetPlan[]>("budget_plan", { year }),

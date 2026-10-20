@@ -351,9 +351,14 @@ pub fn export_all(
 
     let plans = query(
         c,
-        "SELECT i.period, i.sort_order + 1, i.kind, i.name, i.amount_minor
-         FROM plan_item i ORDER BY i.period, i.sort_order, i.id",
-        5,
+        "SELECT i.period, i.sort_order + 1, i.kind, i.name, i.amount_minor,
+                CASE WHEN m.mode = 'individual' THEN ''
+                     WHEN i.owner = 'a' THEN COALESCE(NULLIF(m.person_a, ''), 'person 1')
+                     WHEN i.owner = 'b' THEN COALESCE(NULLIF(m.person_b, ''), 'person 2')
+                     ELSE 'shared' END
+         FROM plan_item i JOIN plan_month m ON m.period = i.period
+         ORDER BY i.period, i.sort_order, i.id",
+        6,
         |r| {
             Ok(vec![
                 r.get(0)?,
@@ -361,13 +366,14 @@ pub fn export_all(
                 r.get(2)?,
                 r.get(3)?,
                 amount(r.get(4)?, 2, d),
+                r.get(5)?,
             ])
         },
     )?;
     files.push(write(
         dir,
         "monthly_plans.csv",
-        &["month", "position", "type", "name", "amount"],
+        &["month", "position", "type", "name", "amount", "whose"],
         &plans,
         style,
     )?);

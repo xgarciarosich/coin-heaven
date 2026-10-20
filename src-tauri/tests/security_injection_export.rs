@@ -554,6 +554,7 @@ fn names_notes_and_labels_round_trip_through_every_command_that_takes_them() {
             kind: "expense".into(),
             name: t,
             amount_minor: 100,
+            owner: "shared".into(),
         })
         .collect();
     b.db().with(|c| plan::save(c, "2026-05", &items)).unwrap();
@@ -1289,6 +1290,7 @@ fn hostile_export_book() -> Book {
             kind: "expense".into(),
             name: (*p).into(),
             amount_minor: 4_250,
+            owner: "shared".into(),
         })
         .collect();
     b.db().with(|c| plan::save(c, "2026-03", &items)).unwrap();
@@ -1856,6 +1858,7 @@ fn removing_the_sample_takes_only_the_sample_even_beside_look_alike_rows() {
                     kind: "income".into(),
                     name: "Salary".into(),
                     amount_minor: 200_000,
+                    owner: "shared".into(),
                 }],
             )
         })

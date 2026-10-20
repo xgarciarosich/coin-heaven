@@ -131,11 +131,13 @@ fn plans_and_the_other_tables_come_out_too() {
                     kind: "income".into(),
                     name: "Pay".into(),
                     amount_minor: 100_000,
+                    owner: "shared".into(),
                 },
                 PlanItem {
                     kind: "expense".into(),
                     name: "Rent".into(),
                     amount_minor: 45_050,
+                    owner: "shared".into(),
                 },
             ],
         )?;

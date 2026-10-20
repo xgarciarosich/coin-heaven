@@ -798,12 +798,24 @@ export interface PlanItem {
   name: string;
   /** Always positive; the kind decides which way it goes. */
   amountMinor: Minor;
+  /** In a plan for two: one person's, the other's, or shared. */
+  owner: "shared" | "a" | "b";
+}
+
+/** Who a month's plan is for, and how a couple splits what they share. */
+export interface PlanSetup {
+  mode: "individual" | "couple";
+  personA: string;
+  personB: string;
+  /** Shared costs: half each, or in proportion to what each brings in. */
+  split: "equal" | "income";
 }
 
 /** A month's plan, boxes in the order the person arranged them. */
 export interface MonthPlan {
   /** "2026-10". */
   period: string;
+  setup: PlanSetup;
   items: PlanItem[];
   incomeMinor: Minor;
   expenseMinor: Minor;

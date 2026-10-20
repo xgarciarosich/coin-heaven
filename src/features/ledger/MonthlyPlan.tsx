@@ -2,10 +2,11 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Check, ChevronLeft, ChevronRight, GripVertical, Plus, Trash2, X } from "lucide-react";
 import { Panel, PanelBody, PanelHead } from "@/components/ui/panel";
 import { Amount } from "@/components/ui/amount";
-import { Banner, Button, Empty } from "@/components/ui/controls";
+import { Banner, Button, Empty, Segmented } from "@/components/ui/controls";
 import { api } from "@/lib/ipc";
 import { fmtMoney, fmtMoneyExact } from "@/lib/money";
-import type { MonthPlan, PlanItem } from "@/lib/types";
+import type { MonthPlan, PlanItem, PlanSetup } from "@/lib/types";
+import { splitPlan } from "@/lib/couple";
 import { cn } from "@/lib/utils";
 import { useT } from "@/lib/i18n";
 
@@ -81,7 +82,7 @@ export function MonthlyPlan() {
 
   const start = (from: MonthPlan | null) =>
     api
-      .planSave(period, from?.items ?? [])
+      .planSave(period, from?.items ?? [], from?.setup)
       .then(() => refresh())
       .catch((e: unknown) => setError(msg(e)));
 
@@ -137,6 +138,7 @@ export function MonthlyPlan() {
             key={period}
             period={period}
             initial={current.items}
+            initialSetup={current.setup}
             onSaved={() => void refresh()}
             onError={setError}
             footerAside={
@@ -219,6 +221,7 @@ export function MonthlyPlan() {
                 >
                   <p className={cn("text-[11px]", on ? "text-brass" : "text-ink-3")}>
                     {short(m.period)}
+                    {m.setup.mode === "couple" && <span className="text-ink-3"> · {p.forTwoShort}</span>}
                   </p>
                   <p
                     className={cn(
@@ -249,6 +252,7 @@ interface Box {
   kind: "income" | "expense";
   name: string;
   amount: number;
+  owner: PlanItem["owner"];
   /** Just added by the person: put the cursor in its name. */
   fresh?: boolean;
 }
@@ -266,12 +270,14 @@ const move = <T,>(list: T[], from: number, to: number) => {
 function Sheet({
   period,
   initial,
+  initialSetup,
   onSaved,
   onError,
   footerAside,
 }: {
   period: string;
   initial: PlanItem[];
+  initialSetup: PlanSetup;
   onSaved: () => void;
   onError: (m: string) => void;
   footerAside: React.ReactNode;
@@ -279,15 +285,23 @@ function Sheet({
   const t = useT();
   const p = t.plan;
   const [boxes, setBoxes] = useState<Box[]>(() =>
-    initial.map((i) => ({ key: nextKey++, kind: i.kind, name: i.name, amount: i.amountMinor })),
+    initial.map((i) => ({
+      key: nextKey++,
+      kind: i.kind,
+      name: i.name,
+      amount: i.amountMinor,
+      owner: i.owner ?? "shared",
+    })),
   );
+  const [setup, setSetup] = useState<PlanSetup>(initialSetup);
+  const couple = setup.mode === "couple";
   const [state, setState] = useState<SaveState>("idle");
 
   /* ---- saving ---------------------------------------------------------- */
 
   // The latest of everything the save needs, readable from a timer.
-  const live = useRef({ boxes, onSaved, onError });
-  live.current = { boxes, onSaved, onError };
+  const live = useRef({ boxes, setup, onSaved, onError });
+  live.current = { boxes, setup, onSaved, onError };
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const running = useRef(false);
   const again = useRef(false);
@@ -304,8 +318,8 @@ function Sheet({
       const items: PlanItem[] = live.current.boxes
         // A box nobody named or priced is a mis-click, not a plan.
         .filter((b) => b.name.trim() !== "" || b.amount !== 0)
-        .map((b) => ({ kind: b.kind, name: b.name.trim(), amountMinor: b.amount }));
-      await api.planSave(period, items);
+        .map((b) => ({ kind: b.kind, name: b.name.trim(), amountMinor: b.amount, owner: b.owner }));
+      await api.planSave(period, items, live.current.setup);
       if (mounted.current) setState("saved");
       live.current.onSaved();
     } catch (e) {
@@ -352,8 +366,25 @@ function Sheet({
     queue(700);
   };
   const add = (kind: Box["kind"]) => {
-    setBoxes((bs) => [...bs, { key: nextKey++, kind, name: "", amount: 0, fresh: true }]);
+    setBoxes((bs) => [
+      ...bs,
+      { key: nextKey++, kind, name: "", amount: 0, owner: "shared", fresh: true },
+    ]);
   };
+  const changeSetup = (patch: Partial<PlanSetup>, delay = 700) => {
+    setSetup((s) => ({ ...s, ...patch }));
+    queue(delay);
+  };
+  const nameA = setup.personA.trim() || p.personA;
+  const nameB = setup.personB.trim() || p.personB;
+  const split = useMemo(
+    () =>
+      splitPlan(
+        boxes.map((b) => ({ kind: b.kind, name: b.name, amountMinor: b.amount, owner: b.owner })),
+        setup,
+      ),
+    [boxes, setup],
+  );
   const remove = (key: number) => {
     setBoxes((bs) => bs.filter((b) => b.key !== key));
     queue(0);
@@ -456,8 +487,56 @@ function Sheet({
     </button>
   );
 
+  const field =
+    "w-36 rounded-md border border-rule bg-surface px-2 py-1 text-[12.5px] text-ink outline-none placeholder:text-ink-3 focus:border-brass";
+
   return (
     <div>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-rule px-5 py-3">
+        <div className="w-52">
+          <Segmented
+            options={[
+              ["individual", p.forOne],
+              ["couple", p.forTwo],
+            ]}
+            value={setup.mode}
+            onChange={(mode) => changeSetup({ mode }, 0)}
+          />
+        </div>
+        {couple ? (
+          <>
+            <input
+              value={setup.personA}
+              placeholder={p.personA}
+              aria-label={p.personA}
+              onChange={(e) => changeSetup({ personA: e.currentTarget.value })}
+              className={field}
+            />
+            <span className="text-[12px] text-ink-3">&amp;</span>
+            <input
+              value={setup.personB}
+              placeholder={p.personB}
+              aria-label={p.personB}
+              onChange={(e) => changeSetup({ personB: e.currentTarget.value })}
+              className={field}
+            />
+            <span className="ml-auto text-[11.5px] text-ink-3">{p.splitLabel}</span>
+            <div className="w-56">
+              <Segmented
+                options={[
+                  ["equal", p.splitEqual],
+                  ["income", p.splitIncome],
+                ]}
+                value={setup.split}
+                onChange={(split) => changeSetup({ split }, 0)}
+              />
+            </div>
+          </>
+        ) : (
+          <span className="text-[11.5px] text-ink-3">{p.forTwoHint}</span>
+        )}
+      </div>
+
       <div
         ref={listRef}
         onPointerMove={onMove}
@@ -472,6 +551,7 @@ function Sheet({
             <span className="w-4 shrink-0" />
             <span className="w-7 shrink-0" />
             <span className="flex-1" />
+            {couple && <span className="eyebrow w-28">{p.whose}</span>}
             <span className="eyebrow w-36 text-right">{p.amount}</span>
             <span className="eyebrow w-28 text-right">{p.runningHead}</span>
             <span className="w-6 shrink-0" />
@@ -533,6 +613,19 @@ function Sheet({
                 onKeyDown={(e) => e.key === "Enter" && e.currentTarget.blur()}
                 className="min-w-0 flex-1 rounded-md border border-transparent bg-transparent px-2 py-1.5 text-[13px] text-ink outline-none transition-colors placeholder:text-ink-3 hover:border-rule focus:border-brass focus:bg-surface"
               />
+              {couple && (
+                <select
+                  value={b.owner}
+                  aria-label={p.whose}
+                  title={p.whose}
+                  onChange={(e) => edit(b.key, { owner: e.currentTarget.value as Box["owner"] })}
+                  className="w-28 shrink-0 truncate rounded-md border border-rule bg-surface px-1.5 py-1 text-[12px] text-ink-2 outline-none focus:border-brass"
+                >
+                  <option value="shared">{p.shared}</option>
+                  <option value="a">{nameA}</option>
+                  <option value="b">{nameB}</option>
+                </select>
+              )}
               <div className="w-36 shrink-0">
                 <Amount
                   value={b.amount}
@@ -571,6 +664,62 @@ function Sheet({
         <p className="border-t border-rule px-5 py-2.5 text-[11px] leading-[1.6] text-ink-3">
           {p.runningNote}
         </p>
+      )}
+
+      {couple && (
+        <div className="border-t border-rule px-5 py-4">
+          <div className="grid gap-3 sm:grid-cols-2">
+            {(
+              [
+                [nameA, split.a, split.shareABps],
+                [nameB, split.b, 10_000 - split.shareABps],
+              ] as const
+            ).map(([who, s, bps]) => (
+              <div key={who} className="rounded-[10px] border border-rule bg-surface px-4 py-3">
+                <p className="text-[13px] font-medium text-ink">{who}</p>
+                <dl className="mt-2 space-y-1 text-[12px]">
+                  <div className="flex justify-between gap-3">
+                    <dt className="text-ink-3">{p.brings}</dt>
+                    <dd className="tnum text-ink">{money(s.income + s.sharedIncome)}</dd>
+                  </div>
+                  <div className="flex justify-between gap-3">
+                    <dt className="text-ink-3">{p.paysAlone}</dt>
+                    <dd className="tnum text-ink">{money(s.own)}</dd>
+                  </div>
+                  <div className="flex justify-between gap-3">
+                    <dt className="text-ink-3">{p.shareOfShared(`${Math.round(bps / 100)} %`)}</dt>
+                    <dd className="tnum text-ink">{money(s.sharedSpend)}</dd>
+                  </div>
+                  <div className="flex justify-between gap-3 border-t border-rule pt-1.5">
+                    <dt className={s.left < 0 ? "text-negative" : "text-ink-2"}>
+                      {s.left < 0 ? p.short : p.net}
+                    </dt>
+                    <dd
+                      className={cn(
+                        "tnum text-[14px]",
+                        s.left < 0 ? "text-negative" : "text-ink",
+                      )}
+                    >
+                      {money(Math.abs(s.left))}
+                    </dd>
+                  </div>
+                </dl>
+                {s.sharedSpend > 0 && (
+                  <p className="mt-2 text-[11px] leading-[1.5] text-ink-3">
+                    {p.putsIn(money(s.sharedSpend))}
+                  </p>
+                )}
+              </div>
+            ))}
+          </div>
+          <p className="mt-2.5 text-[11px] leading-[1.6] text-ink-3">
+            {split.sharedSpend > 0
+              ? setup.split === "income"
+                ? p.splitIncomeNote(money(split.sharedSpend), nameA, nameB)
+                : p.splitEqualNote(money(split.sharedSpend))
+              : p.noShared}
+          </p>
+        </div>
       )}
 
       <div className="flex flex-wrap items-end gap-x-8 gap-y-3 border-t border-rule bg-paper-sunk/60 px-5 py-4">

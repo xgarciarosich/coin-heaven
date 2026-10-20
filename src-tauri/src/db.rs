@@ -44,6 +44,7 @@ static MIGRATIONS: Lazy<Migrations<'static>> = Lazy::new(|| {
             "../migrations/0018_neutral_categories_are_not_income_or_spending.sql"
         )),
         M::up(include_str!("../migrations/0019_holding_order.sql")),
+        M::up(include_str!("../migrations/0020_plan_for_two.sql")),
     ])
 });
 
@@ -205,7 +206,7 @@ mod tests {
         let path = dir.path().join("atlas.db");
 
         let db = Db::open(&path, &test_key()).unwrap();
-        assert_eq!(db.schema_version().unwrap(), 19);
+        assert_eq!(db.schema_version().unwrap(), 20);
         let cats: i64 = db
             .with(|c| Ok(c.query_row("SELECT count(*) FROM pl_category", [], |r| r.get(0))?))
             .unwrap();

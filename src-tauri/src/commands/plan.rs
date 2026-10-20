@@ -28,6 +28,36 @@ pub struct PlanItem {
     pub name: String,
     /// Always positive; the kind decides the direction.
     pub amount_minor: i64,
+    /// In a plan for two: "a", "b" or "shared". Ignored in a plan for one.
+    #[serde(default = "shared")]
+    pub owner: String,
+}
+
+fn shared() -> String {
+    "shared".into()
+}
+
+/// Who a month's plan is for, and how a couple splits what they share.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct PlanSetup {
+    /// "individual" or "couple".
+    pub mode: String,
+    pub person_a: String,
+    pub person_b: String,
+    /// "equal" (half each) or "income" (in proportion to what each brings in).
+    pub split: String,
+}
+
+impl Default for PlanSetup {
+    fn default() -> Self {
+        PlanSetup {
+            mode: "individual".into(),
+            person_a: String::new(),
+            person_b: String::new(),
+            split: "equal".into(),
+        }
+    }
 }
 
 #[derive(Serialize, Debug)]
@@ -35,6 +65,7 @@ pub struct PlanItem {
 pub struct MonthPlan {
     /// "2026-10".
     pub period: String,
+    pub setup: PlanSetup,
     /// In the order the person arranged them.
     pub items: Vec<PlanItem>,
     pub income_minor: Money,
@@ -65,7 +96,8 @@ pub fn plan_list(state: State<'_, AppState>) -> AppResult<Vec<MonthPlan>> {
 pub fn list(c: &rusqlite::Connection) -> AppResult<Vec<MonthPlan>> {
     let mut plans: Vec<MonthPlan> = Vec::new();
     let mut stmt = c.prepare(
-        "SELECT m.period, i.kind, i.name, i.amount_minor
+        "SELECT m.period, i.kind, i.name, i.amount_minor, i.owner,
+                m.mode, m.person_a, m.person_b, m.split
          FROM plan_month m
          LEFT JOIN plan_item i ON i.period = m.period
          ORDER BY m.period, i.sort_order, i.id",
@@ -76,6 +108,12 @@ pub fn list(c: &rusqlite::Connection) -> AppResult<Vec<MonthPlan>> {
         if plans.last().is_none_or(|p| p.period != period) {
             plans.push(MonthPlan {
                 period,
+                setup: PlanSetup {
+                    mode: r.get(5)?,
+                    person_a: r.get(6)?,
+                    person_b: r.get(7)?,
+                    split: r.get(8)?,
+                },
                 items: Vec::new(),
                 income_minor: Money::ZERO,
                 expense_minor: Money::ZERO,
@@ -98,6 +136,7 @@ pub fn list(c: &rusqlite::Connection) -> AppResult<Vec<MonthPlan>> {
             kind,
             name: r.get(2)?,
             amount_minor: amount,
+            owner: r.get(4)?,
         });
     }
     for p in &mut plans {
@@ -113,8 +152,15 @@ pub fn plan_save(
     state: State<'_, AppState>,
     period: String,
     items: Vec<PlanItem>,
+    setup: Option<PlanSetup>,
 ) -> AppResult<()> {
-    state.db()?.with(|c| save(c, &period, &items))?;
+    state.db()?.with(|c| {
+        save(c, &period, &items)?;
+        match &setup {
+            Some(s) => save_setup(c, &period, s),
+            None => Ok(()),
+        }
+    })?;
     state.backup.mark_dirty();
     Ok(())
 }
@@ -131,6 +177,12 @@ pub fn save(c: &rusqlite::Connection, period: &str, items: &[PlanItem]) -> AppRe
             return Err(AppError::Invalid(format!(
                 "a box is income or expense, not {:?}",
                 it.kind
+            )));
+        }
+        if !matches!(it.owner.as_str(), "shared" | "a" | "b") {
+            return Err(AppError::Invalid(format!(
+                "a box belongs to one person or is shared, not {:?}",
+                it.owner
             )));
         }
         if it.amount_minor < 0 || it.amount_minor > MAX_AMOUNT_MINOR {
@@ -151,8 +203,8 @@ pub fn save(c: &rusqlite::Connection, period: &str, items: &[PlanItem]) -> AppRe
     )?;
     {
         let mut stmt = tx.prepare(
-            "INSERT INTO plan_item (period, kind, name, amount_minor, sort_order)
-             VALUES (?1, ?2, ?3, ?4, ?5)",
+            "INSERT INTO plan_item (period, kind, name, amount_minor, sort_order, owner)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
         )?;
         for (i, it) in items.iter().enumerate() {
             let name: String = it.name.trim().chars().take(MAX_NAME_CHARS).collect();
@@ -161,11 +213,46 @@ pub fn save(c: &rusqlite::Connection, period: &str, items: &[PlanItem]) -> AppRe
                 it.kind,
                 name,
                 it.amount_minor,
-                i as i64
+                i as i64,
+                it.owner
             ])?;
         }
     }
     tx.commit()?;
+    Ok(())
+}
+
+/// Record who a month's plan is for. The month must exist (saved first).
+pub fn save_setup(c: &rusqlite::Connection, period: &str, s: &PlanSetup) -> AppResult<()> {
+    check_period(period)?;
+    if !matches!(s.mode.as_str(), "individual" | "couple") {
+        return Err(AppError::Invalid(format!(
+            "a plan is for one person or two, not {:?}",
+            s.mode
+        )));
+    }
+    if !matches!(s.split.as_str(), "equal" | "income") {
+        return Err(AppError::Invalid(format!(
+            "shared costs are split half each or by income, not {:?}",
+            s.split
+        )));
+    }
+    let name = |n: &str| n.trim().chars().take(MAX_NAME_CHARS).collect::<String>();
+    c.execute(
+        "INSERT OR IGNORE INTO plan_month (period) VALUES (?1)",
+        rusqlite::params![period],
+    )?;
+    c.execute(
+        "UPDATE plan_month SET mode = ?2, person_a = ?3, person_b = ?4, split = ?5
+         WHERE period = ?1",
+        rusqlite::params![
+            period,
+            s.mode,
+            name(&s.person_a),
+            name(&s.person_b),
+            s.split
+        ],
+    )?;
     Ok(())
 }
 

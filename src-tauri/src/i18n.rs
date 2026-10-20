@@ -101,6 +101,18 @@ const CATALOGUE: &[(&str, &str)] = &[
     ),
     ("key info is missing", "faltan los datos de la clave"),
     (
+        "a box belongs to one person or is shared, not {}",
+        "una casilla es de una persona o compartida, no {}",
+    ),
+    (
+        "a plan is for one person or two, not {}",
+        "un plan es para una persona o para dos, no {}",
+    ),
+    (
+        "shared costs are split half each or by income, not {}",
+        "los gastos compartidos se reparten a medias o según ingresos, no {}",
+    ),
+    (
         "cannot encode the item order: {}",
         "no se puede guardar el orden de los elementos: {}",
     ),
