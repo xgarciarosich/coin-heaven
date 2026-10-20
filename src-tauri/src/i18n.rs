@@ -109,8 +109,12 @@ const CATALOGUE: &[(&str, &str)] = &[
         "un plan es para una persona o para dos, no {}",
     ),
     (
-        "shared costs are split half each or by income, not {}",
-        "los gastos compartidos se reparten a medias o según ingresos, no {}",
+        "shared costs are split half each, by income or by a share you set, not {}",
+        "los gastos compartidos se reparten a medias, según ingresos o en la proporción que elijáis, no {}",
+    ),
+    (
+        "each person's share must be between 0 % and 100 %",
+        "la parte de cada persona tiene que estar entre el 0 % y el 100 %",
     ),
     (
         "cannot encode the item order: {}",

@@ -807,8 +807,10 @@ export interface PlanSetup {
   mode: "individual" | "couple";
   personA: string;
   personB: string;
-  /** Shared costs: half each, or in proportion to what each brings in. */
-  split: "equal" | "income";
+  /** Shared costs: half each, in proportion to income, or a share you set. */
+  split: "equal" | "income" | "custom";
+  /** Person A's share for "custom", in basis points (6000 = 60 %). */
+  customABps: number;
 }
 
 /** A month's plan, boxes in the order the person arranged them. */

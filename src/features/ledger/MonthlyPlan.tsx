@@ -27,6 +27,7 @@ const addMonths = (period: string, by: number) => {
 
 /** Whole amounts without cents, amounts with cents with them. */
 const money = (m: number) => (m % 100 === 0 ? fmtMoney(m) : fmtMoneyExact(m));
+const pct = (bps: number) => `${Math.round(bps / 100)} %`;
 
 /**
  * A worksheet for one month: boxes of income and spending, in whatever order
@@ -521,16 +522,53 @@ function Sheet({
               className={field}
             />
             <span className="ml-auto text-[11.5px] text-ink-3">{p.splitLabel}</span>
-            <div className="w-56">
+            <div className="w-72">
               <Segmented
                 options={[
                   ["equal", p.splitEqual],
                   ["income", p.splitIncome],
+                  ["custom", p.splitCustom],
                 ]}
                 value={setup.split}
                 onChange={(split) => changeSetup({ split }, 0)}
               />
             </div>
+            {setup.split === "custom" && (
+              <div className="flex w-full items-center justify-end gap-3">
+                <span className="whitespace-nowrap text-[12px] text-ink-2">
+                  {nameA} <b className="tnum font-medium text-ink">{pct(setup.customABps)}</b>
+                </span>
+                <input
+                  type="range"
+                  min={0}
+                  max={100}
+                  step={1}
+                  value={Math.round(setup.customABps / 100)}
+                  aria-label={p.customShare(nameA)}
+                  onChange={(e) => changeSetup({ customABps: Number(e.currentTarget.value) * 100 })}
+                  className="w-56 accent-[var(--brass)]"
+                />
+                <input
+                  type="number"
+                  min={0}
+                  max={100}
+                  step={1}
+                  value={Math.round(setup.customABps / 100)}
+                  aria-label={p.customShare(nameA)}
+                  onChange={(e) => {
+                    const v = Number(e.currentTarget.value);
+                    if (Number.isFinite(v)) {
+                      changeSetup({ customABps: Math.min(100, Math.max(0, Math.round(v))) * 100 });
+                    }
+                  }}
+                  className="tnum w-16 rounded-md border border-rule bg-surface px-2 py-1 text-right text-[12.5px] text-ink outline-none focus:border-brass"
+                />
+                <span className="whitespace-nowrap text-[12px] text-ink-2">
+                  % · {nameB}{" "}
+                  <b className="tnum font-medium text-ink">{pct(10_000 - setup.customABps)}</b>
+                </span>
+              </div>
+            )}
           </>
         ) : (
           <span className="text-[11.5px] text-ink-3">{p.forTwoHint}</span>
@@ -716,7 +754,13 @@ function Sheet({
             {split.sharedSpend > 0
               ? setup.split === "income"
                 ? p.splitIncomeNote(money(split.sharedSpend), nameA, nameB)
-                : p.splitEqualNote(money(split.sharedSpend))
+                : setup.split === "custom"
+                  ? p.splitCustomNote(
+                      money(split.sharedSpend),
+                      `${nameA} ${pct(split.shareABps)}`,
+                      `${nameB} ${pct(10_000 - split.shareABps)}`,
+                    )
+                  : p.splitEqualNote(money(split.sharedSpend))
               : p.noShared}
           </p>
         </div>

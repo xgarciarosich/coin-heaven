@@ -584,7 +584,7 @@ dependencies = [
 
 [[package]]
 name = "coin-heaven"
-version = "1.2.0"
+version = "1.2.1"
 dependencies = [
  "anyhow",
  "approx",

@@ -45,8 +45,16 @@ pub struct PlanSetup {
     pub mode: String,
     pub person_a: String,
     pub person_b: String,
-    /// "equal" (half each) or "income" (in proportion to what each brings in).
+    /// "equal" (half each), "income" (in proportion to what each brings in)
+    /// or "custom" (person A's share is `custom_a_bps`).
     pub split: String,
+    /// Person A's share of what is shared, in basis points, for "custom".
+    #[serde(default = "half")]
+    pub custom_a_bps: i64,
+}
+
+fn half() -> i64 {
+    5_000
 }
 
 impl Default for PlanSetup {
@@ -56,6 +64,7 @@ impl Default for PlanSetup {
             person_a: String::new(),
             person_b: String::new(),
             split: "equal".into(),
+            custom_a_bps: 5_000,
         }
     }
 }
@@ -97,7 +106,7 @@ pub fn list(c: &rusqlite::Connection) -> AppResult<Vec<MonthPlan>> {
     let mut plans: Vec<MonthPlan> = Vec::new();
     let mut stmt = c.prepare(
         "SELECT m.period, i.kind, i.name, i.amount_minor, i.owner,
-                m.mode, m.person_a, m.person_b, m.split
+                m.mode, m.person_a, m.person_b, m.split, m.custom_a_bps
          FROM plan_month m
          LEFT JOIN plan_item i ON i.period = m.period
          ORDER BY m.period, i.sort_order, i.id",
@@ -113,6 +122,7 @@ pub fn list(c: &rusqlite::Connection) -> AppResult<Vec<MonthPlan>> {
                     person_a: r.get(6)?,
                     person_b: r.get(7)?,
                     split: r.get(8)?,
+                    custom_a_bps: r.get(9)?,
                 },
                 items: Vec::new(),
                 income_minor: Money::ZERO,
@@ -231,9 +241,14 @@ pub fn save_setup(c: &rusqlite::Connection, period: &str, s: &PlanSetup) -> AppR
             s.mode
         )));
     }
-    if !matches!(s.split.as_str(), "equal" | "income") {
+    if !(0..=10_000).contains(&s.custom_a_bps) {
+        return Err(AppError::Invalid(
+            "each person's share must be between 0 % and 100 %".into(),
+        ));
+    }
+    if !matches!(s.split.as_str(), "equal" | "income" | "custom") {
         return Err(AppError::Invalid(format!(
-            "shared costs are split half each or by income, not {:?}",
+            "shared costs are split half each, by income or by a share you set, not {:?}",
             s.split
         )));
     }
@@ -243,14 +258,16 @@ pub fn save_setup(c: &rusqlite::Connection, period: &str, s: &PlanSetup) -> AppR
         rusqlite::params![period],
     )?;
     c.execute(
-        "UPDATE plan_month SET mode = ?2, person_a = ?3, person_b = ?4, split = ?5
+        "UPDATE plan_month SET mode = ?2, person_a = ?3, person_b = ?4, split = ?5,
+                custom_a_bps = ?6
          WHERE period = ?1",
         rusqlite::params![
             period,
             s.mode,
             name(&s.person_a),
             name(&s.person_b),
-            s.split
+            s.split,
+            s.custom_a_bps
         ],
     )?;
     Ok(())

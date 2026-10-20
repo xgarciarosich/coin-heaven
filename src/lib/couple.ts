@@ -25,9 +25,9 @@ export interface CoupleSplit {
 /**
  * How a month's plan divides between two people.
  *
- * Each box is one person's or shared. Shared boxes are divided half each, or
- * in proportion to what each brings in alone (if neither brings in anything,
- * half each). The two parts of a shared amount always add up to it exactly,
+ * Each box is one person's or shared. Shared boxes are divided half each, in
+ * proportion to what each brings in alone (if neither brings in anything, half
+ * each), or in a proportion the couple sets themselves. The two parts of a shared amount always add up to it exactly,
  * so the two "left" figures add up to the household's.
  */
 export function splitPlan(items: readonly PlanItem[], setup: PlanSetup): CoupleSplit {
@@ -40,9 +40,11 @@ export function splitPlan(items: readonly PlanItem[], setup: PlanSetup): CoupleS
   const sharedIncome = sum("shared", "income");
   const sharedSpend = sum("shared", "expense");
   const shareABps =
-    setup.split === "income" && incomeA + incomeB > 0
-      ? Math.round((incomeA * 10_000) / (incomeA + incomeB))
-      : 5_000;
+    setup.split === "custom"
+      ? Math.min(10_000, Math.max(0, Math.round(setup.customABps)))
+      : setup.split === "income" && incomeA + incomeB > 0
+        ? Math.round((incomeA * 10_000) / (incomeA + incomeB))
+        : 5_000;
   const part = (total: number) => {
     const a = Math.round((total * shareABps) / 10_000);
     return [a, total - a] as const;

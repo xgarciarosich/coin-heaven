@@ -27,8 +27,8 @@ interface MockLine {
 }
 let sampleLoaded = false;
 interface MockPlanItem { kind: "income" | "expense"; name: string; amountMinor: number; owner?: "shared" | "a" | "b" }
-const mockSetups = new Map<string, Record<string, string>>();
-const individual = { mode: "individual", personA: "", personB: "", split: "equal" };
+const mockSetups = new Map<string, Record<string, string | number>>();
+const individual = { mode: "individual", personA: "", personB: "", split: "equal", customABps: 5000 };
 const mockPlans = new Map<string, MockPlanItem[]>([
   ["2024-10", [
     { kind: "income", name: "Salary", amountMinor: 210_000 },
@@ -650,7 +650,7 @@ export const mockResponses: Record<string, (args?: never) => unknown> = {
           netMinor: incomeMinor - expenseMinor,
         };
       }),
-  plan_save: ((args: { period: string; items: MockPlanItem[]; setup: Record<string, string> | null }) => {
+  plan_save: ((args: { period: string; items: MockPlanItem[]; setup: Record<string, string | number> | null }) => {
     mockPlans.set(args.period, args.items);
     if (args.setup) mockSetups.set(args.period, args.setup);
   }) as never,

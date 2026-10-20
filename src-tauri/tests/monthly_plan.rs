@@ -200,6 +200,7 @@ fn a_plan_for_two_keeps_who_each_box_belongs_to_and_how_they_split() {
                 person_a: " Ana ".into(),
                 person_b: "Ben".into(),
                 split: "income".into(),
+                custom_a_bps: 5_000,
             },
         )
     })
@@ -242,4 +243,38 @@ fn a_box_saved_by_an_older_version_without_an_owner_is_shared() {
     let json = r#"{"kind":"income","name":"Pay","amountMinor":100}"#;
     let it: PlanItem = serde_json::from_str(json).unwrap();
     assert_eq!(it.owner, "shared");
+}
+
+#[test]
+fn a_couple_can_agree_their_own_split() {
+    let (_d, db) = book();
+    let custom = |bps: i64| plan::PlanSetup {
+        mode: "couple".into(),
+        split: "custom".into(),
+        custom_a_bps: bps,
+        ..plan::PlanSetup::default()
+    };
+    db.with(|c| {
+        plan::save(c, "2026-11", &[item("expense", "Rent", 100_000)])?;
+        plan::save_setup(c, "2026-11", &custom(6_500))
+    })
+    .unwrap();
+    let p = &db.with(plan::list).unwrap()[0];
+    assert_eq!(
+        (p.setup.split.as_str(), p.setup.custom_a_bps),
+        ("custom", 6_500)
+    );
+    assert_eq!(p.items.len(), 1, "the boxes survive the table rebuild");
+    for bad in [-1, 10_001] {
+        assert!(
+            db.with(|c| plan::save_setup(c, "2026-11", &custom(bad)))
+                .is_err()
+        );
+    }
+    // Deleting the month still takes its boxes with it.
+    db.with(|c| plan::delete(c, "2026-11")).unwrap();
+    let left: i64 = db
+        .with(|c| Ok(c.query_row("SELECT count(*) FROM plan_item", [], |r| r.get(0))?))
+        .unwrap();
+    assert_eq!(left, 0);
 }
