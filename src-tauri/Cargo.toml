@@ -1,6 +1,6 @@
 [package]
 name = "coin-heaven"
-version = "1.1.0"
+version = "1.2.0"
 description = "Local-first wealth and real estate portfolio simulator"
 edition = "2024"
 rust-version = "1.88"
@@ -22,7 +22,7 @@ anyhow = "1.0.104"
 argon2 = "0.5.3"
 base64 = "0.23.1"
 bip39 = "2.2.2"
-calamine = { version = "0.36.1", features = ["dates"] }
+calamine = { version = "0.37.0", features = ["dates"] }
 chacha20poly1305 = "0.11.0"
 chrono = { version = "0.4.45", features = ["serde"] }
 csv = "1.4.0"
