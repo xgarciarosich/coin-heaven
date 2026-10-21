@@ -59,6 +59,8 @@ pub struct MatrixRow {
     pub category_name: String,
     pub kind: String,
     pub color: Option<String>,
+    /// Where the person put this category in their own order.
+    pub sort_order: i64,
     /// One entry per period, in the same order as `Matrix::periods`.
     pub cells: Vec<Money>,
     pub counts: Vec<i64>,
@@ -162,12 +164,38 @@ pub fn matrix(c: &rusqlite::Connection, year: i32) -> AppResult<Matrix> {
                 category_name: a.name,
                 kind: a.kind,
                 color: a.color,
+                sort_order: a.sort,
                 cells: a.cells,
                 counts: a.counts,
             })
             .collect();
+
+        // Rows that a budget exists for but that saw no money this year still
+        // belong in the table — "budgeted 1.200, spent nothing" is a result.
+        for (cat_id, amount) in &budgets {
+            if out.iter().any(|r| r.category_id == Some(*cat_id)) {
+                continue;
+            }
+            if let Some((name, kind, color, sort)) = category_meta(c, *cat_id)? {
+                out.push(MatrixRow {
+                    category_id: Some(*cat_id),
+                    category_name: name,
+                    kind,
+                    color,
+                    sort_order: sort,
+                    cells: vec![Money::ZERO; 12],
+                    counts: vec![0; 12],
+                    total_minor: Money::ZERO,
+                    budget_minor: Some(*amount),
+                });
+            }
+        }
+
+        // Income first, then spending, then money that only moved, each in the
+        // order the person arranged their categories in (Categories & rules);
+        // what has no category goes last. Rows that only carry a budget are
+        // placed the same way, not tacked on at the end.
         out.sort_by(|a, b| {
-            // Income first, then expenses, each in the user's own order.
             let rank = |r: &MatrixRow| match (r.category_id, r.kind.as_str()) {
                 (None, _) => 3,
                 (_, "income") => 0,
@@ -176,34 +204,9 @@ pub fn matrix(c: &rusqlite::Connection, year: i32) -> AppResult<Matrix> {
             };
             rank(a)
                 .cmp(&rank(b))
-                .then_with(|| {
-                    b.total_minor
-                        .minor()
-                        .abs()
-                        .cmp(&a.total_minor.minor().abs())
-                })
+                .then(a.sort_order.cmp(&b.sort_order))
                 .then_with(|| a.category_name.cmp(&b.category_name))
         });
-
-        // Rows that a budget exists for but that saw no money this year still
-        // belong in the table — "budgeted 1.200, spent nothing" is a result.
-        for (cat_id, amount) in &budgets {
-            if out.iter().any(|r| r.category_id == Some(*cat_id)) {
-                continue;
-            }
-            if let Some((name, kind, color)) = category_meta(c, *cat_id)? {
-                out.push(MatrixRow {
-                    category_id: Some(*cat_id),
-                    category_name: name,
-                    kind,
-                    color,
-                    cells: vec![Money::ZERO; 12],
-                    counts: vec![0; 12],
-                    total_minor: Money::ZERO,
-                    budget_minor: Some(*amount),
-                });
-            }
-        }
 
         let mut income = vec![Money::ZERO; 12];
         let mut expense = vec![Money::ZERO; 12];
@@ -235,14 +238,14 @@ pub fn matrix(c: &rusqlite::Connection, year: i32) -> AppResult<Matrix> {
     }
 }
 
-fn category_meta(
-    c: &rusqlite::Connection,
-    id: i64,
-) -> rusqlite::Result<Option<(String, String, Option<String>)>> {
+/// Name, kind, colour and the place the person gave a category in their order.
+type CategoryMeta = (String, String, Option<String>, i64);
+
+fn category_meta(c: &rusqlite::Connection, id: i64) -> rusqlite::Result<Option<CategoryMeta>> {
     c.query_row(
-        "SELECT name, kind, color FROM pl_category WHERE id = ?1",
+        "SELECT name, kind, color, sort_order FROM pl_category WHERE id = ?1",
         rusqlite::params![id],
-        |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+        |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
     )
     .map(Some)
     .or_else(|e| match e {

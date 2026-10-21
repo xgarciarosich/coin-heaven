@@ -1,5 +1,5 @@
 import { Fragment, useMemo, useRef, useState } from "react";
-import { ChevronDown, Link2, Pencil, X } from "lucide-react";
+import { ChevronDown, Link2, Pencil, Search, Trash2, X } from "lucide-react";
 import { fmtMoney } from "@/lib/money";
 import type { LedgerRow } from "@/lib/types";
 import { cn } from "@/lib/utils";
@@ -67,6 +67,11 @@ export function TransactionTree({
   editing,
   onEdit,
   renderEditor,
+  deleting,
+  onAskDelete,
+  renderDeleteConfirm,
+  onSearchSame,
+  openAll,
 }: {
   rows: LedgerRow[];
   grouping: Grouping;
@@ -77,6 +82,14 @@ export function TransactionTree({
   editing: number | null;
   onEdit: (id: number) => void;
   renderEditor: (row: LedgerRow) => React.ReactNode;
+  /** The line a delete is being confirmed for. */
+  deleting: number | null;
+  onAskDelete: (id: number) => void;
+  renderDeleteConfirm: (row: LedgerRow) => React.ReactNode;
+  /** "Show me everything with this name." */
+  onSearchSame: (row: LedgerRow) => void;
+  /** The list has been narrowed (a search, an import): show the lines open. */
+  openAll?: boolean;
 }) {
   const t = useT();
   // Open groups. Nothing is open until it is asked for; the choice is kept
@@ -86,6 +99,26 @@ export function TransactionTree({
   if (openFor !== grouping) {
     setOpenFor(grouping);
     setOpen(new Set());
+  }
+  const [autoFor, setAutoFor] = useState(false);
+  const keysNow = (): string[] => {
+    const seen = new Set<string>();
+    for (const r of rows) {
+      seen.add(grouping === "month" ? r.bookedOn.slice(0, 7) : String(r.categoryId ?? "none"));
+    }
+    return [...seen];
+  };
+  // A narrowed list is the answer to a question: show it, not a column of
+  // closed groups. It can still be folded afterwards.
+  if ((openAll ?? false) !== autoFor) {
+    setAutoFor(openAll ?? false);
+    if (openAll) setOpen(new Set(keysNow()));
+  }
+  const [lastRows, setLastRows] = useState(rows);
+  if (lastRows !== rows) {
+    setLastRows(rows);
+    // New results while narrowed (the search was edited): open what is there.
+    if (openAll) setOpen(new Set(keysNow()));
   }
   const toggle = (key: string) =>
     setOpen((c) => {
@@ -156,6 +189,10 @@ export function TransactionTree({
             editing={editing}
             onEdit={onEdit}
             renderEditor={renderEditor}
+            deleting={deleting}
+            onAskDelete={onAskDelete}
+            renderDeleteConfirm={renderDeleteConfirm}
+            onSearchSame={onSearchSame}
           />
         ))}
     </Fragment>
@@ -282,6 +319,10 @@ function RowWithEditor({
   editing,
   onEdit,
   renderEditor,
+  deleting,
+  onAskDelete,
+  renderDeleteConfirm,
+  onSearchSame,
 }: {
   row: LedgerRow;
   depth: number;
@@ -290,6 +331,10 @@ function RowWithEditor({
   editing: number | null;
   onEdit: (id: number) => void;
   renderEditor: (row: LedgerRow) => React.ReactNode;
+  deleting: number | null;
+  onAskDelete: (id: number) => void;
+  renderDeleteConfirm: (row: LedgerRow) => React.ReactNode;
+  onSearchSame: (row: LedgerRow) => void;
 }) {
   const isEditing = editing === row.id;
   return (
@@ -301,7 +346,16 @@ function RowWithEditor({
         onPick={(shift) => onPick(row.id, shift)}
         onEdit={() => onEdit(row.id)}
         isEditing={isEditing}
+        onDelete={() => onAskDelete(row.id)}
+        onSearchSame={() => onSearchSame(row)}
       />
+      {deleting === row.id && (
+        <tr className="border-b border-rule bg-negative/[0.05]">
+          <td colSpan={7} className="px-5 py-3">
+            {renderDeleteConfirm(row)}
+          </td>
+        </tr>
+      )}
       {isEditing && (
         <tr className="border-b border-rule bg-brass-wash/30">
           <td colSpan={7} className="px-5 py-4">
@@ -319,10 +373,14 @@ export function Row({
   onPick,
   onEdit,
   isEditing,
+  onDelete,
+  onSearchSame,
   depth = 0,
 }: {
   row: LedgerRow;
   checked: boolean;
+  onDelete?: () => void;
+  onSearchSame?: () => void;
   /** `shift` is true for a shift-click: select the range from the last one. */
   onPick: (shift: boolean) => void;
   onEdit: () => void;
@@ -338,6 +396,11 @@ export function Row({
         checked && "bg-brass-wash/50",
         row.isNeutralTransfer && "opacity-45",
       )}
+      // Two clicks on a line open it for editing, as the pencil does.
+      onDoubleClick={(e) => {
+        if ((e.target as HTMLElement).closest("button, input, select, a")) return;
+        if (!isEditing) onEdit();
+      }}
     >
       <td className={cn("py-1.5", depth > 0 ? "pl-10" : "pl-5")}>
         <input
@@ -388,11 +451,23 @@ export function Row({
           </span>
         )}
       </td>
-      <td className="py-1.5 pr-5 pl-3 text-right">
+      <td className="py-1.5 pr-5 pl-3 text-right whitespace-nowrap">
+        {onSearchSame && (
+          <button
+            type="button"
+            onClick={onSearchSame}
+            aria-label={t.ledger.searchSame}
+            title={t.ledger.searchSame}
+            className="rounded p-1 text-ink-3 transition-colors hover:text-ink"
+          >
+            <Search className="size-3" strokeWidth={1.75} />
+          </button>
+        )}
         <button
           type="button"
           onClick={onEdit}
           aria-label={t.ledger.editTxn}
+          title={t.ledger.editTxn}
           className="rounded p-1 text-ink-3 transition-colors hover:text-ink"
         >
           {isEditing ? (
@@ -401,6 +476,17 @@ export function Row({
             <Pencil className="size-3" strokeWidth={1.75} />
           )}
         </button>
+        {onDelete && (
+          <button
+            type="button"
+            onClick={onDelete}
+            aria-label={t.ledger.deleteTxn}
+            title={t.ledger.deleteTxn}
+            className="rounded p-1 text-ink-3 transition-colors hover:text-negative"
+          >
+            <Trash2 className="size-3" strokeWidth={1.75} />
+          </button>
+        )}
       </td>
     </tr>
   );

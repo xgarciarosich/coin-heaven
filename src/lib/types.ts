@@ -754,6 +754,8 @@ export interface DateFormat {
 // --- the category x month matrix, budgets, auto-categorisation ---------------
 
 export interface MatrixRow {
+  /** Where the person put this category in their own order. */
+  sortOrder: number;
   categoryId: number | null;
   categoryName: string;
   kind: string;

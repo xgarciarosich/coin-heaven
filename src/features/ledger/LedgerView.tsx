@@ -98,6 +98,7 @@ export function LedgerView({ modules }: { modules: ModuleToggles | null }) {
   const [onlyReview, setOnlyReview] = useState(false);
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [editing, setEditing] = useState<number | null>(null);
+  const [deletingTxn, setDeletingTxn] = useState<number | null>(null);
   const [grouping, setGrouping] = useState<Grouping>("month");
   const [tidying, setTidying] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -725,7 +726,46 @@ export function LedgerView({ modules }: { modules: ModuleToggles | null }) {
                   onToggleSelect={toggle}
                   onSelectMany={selectMany}
                   editing={editing}
-                  onEdit={(id) => setEditing(editing === id ? null : id)}
+                  onEdit={(id) => {
+                    setDeletingTxn(null);
+                    setEditing(editing === id ? null : id);
+                  }}
+                  deleting={deletingTxn}
+                  onAskDelete={(id) => {
+                    setEditing(null);
+                    setDeletingTxn(deletingTxn === id ? null : id);
+                  }}
+                  renderDeleteConfirm={(row) => (
+                    <div className="flex flex-wrap items-center gap-3">
+                      <span className="text-[12.5px] text-ink-2">{t.ledger.deleteSure}</span>
+                      <Button variant="ghost" onClick={() => setDeletingTxn(null)}>
+                        {t.common.cancel}
+                      </Button>
+                      <Button
+                        variant="danger"
+                        onClick={() =>
+                          api
+                            .txnDelete([row.id])
+                            .then(() => {
+                              setDeletingTxn(null);
+                              refreshAll();
+                            })
+                            .catch((e: unknown) => setError(msg(e)))
+                        }
+                      >
+                        {t.ledger.deleteTxn}
+                      </Button>
+                    </div>
+                  )}
+                  onSearchSame={(row) => {
+                    // Everything with the same name: the shop it is from, or
+                    // failing that the whole description.
+                    setSearch(row.merchant ?? row.description);
+                    setBatchId(null);
+                    window.scrollTo({ top: 0, behavior: "smooth" });
+                    document.querySelector("main")?.scrollTo({ top: 0, behavior: "smooth" });
+                  }}
+                  openAll={search.trim() !== "" || batchId !== null}
                   renderEditor={(row) => (
                     <RowEditor
                       row={row}
@@ -775,7 +815,6 @@ function RowEditor({
   const [projectId, setProjectId] = useState<number | null>(row.projectId);
   const [neutral, setNeutral] = useState(row.isNeutralTransfer);
   const [notes, setNotes] = useState(row.notes ?? "");
-  const [confirming, setConfirming] = useState(false);
 
   const save = () => {
     const value = Number(amount.trim().replace(",", "."));
@@ -902,30 +941,7 @@ function RowEditor({
             </Button>
           )}
         </div>
-        {confirming ? (
-          <div className="flex items-center gap-2">
-            <span className="text-[12px] text-ink-2">{t.ledger.deleteSure}</span>
-            <Button variant="ghost" onClick={() => setConfirming(false)}>
-              {t.common.cancel}
-            </Button>
-            <Button
-              variant="danger"
-              onClick={() =>
-                api
-                  .txnDelete([row.id])
-                  .then(onSaved)
-                  .catch((e: unknown) => onError(msg(e)))
-              }
-            >
-              {t.ledger.deleteTxn}
-            </Button>
-          </div>
-        ) : (
-          <div className="flex gap-2">
-            <Button variant="ghost" onClick={() => setConfirming(true)}>
-              <Trash2 className="size-3" strokeWidth={1.75} />
-              {t.ledger.deleteTxn}
-            </Button>
+        <div className="flex gap-2">
             <Button variant="ghost" onClick={onClose}>
               {t.common.cancel}
             </Button>
@@ -933,7 +949,6 @@ function RowEditor({
               {t.common.save}
             </Button>
           </div>
-        )}
       </div>
     </div>
   );

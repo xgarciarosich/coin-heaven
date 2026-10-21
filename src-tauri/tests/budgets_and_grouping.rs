@@ -365,3 +365,75 @@ fn a_merchant_filed_two_ways_is_not_guessed() {
     })
     .unwrap();
 }
+
+#[test]
+fn the_matrix_lists_categories_in_the_order_the_person_arranged_them() {
+    let (_d, db) = ledger();
+    db.with(|c| {
+        // Three more spending categories, with money in each, so weight would
+        // order them differently from the person's own order.
+        c.execute(
+            "INSERT INTO pl_category (id, name, kind, sort_order) VALUES
+               (910, 'Alpha', 'expense', 50), (911, 'Beta', 'expense', 30), (912, 'Gamma', 'expense', 40)",
+            [],
+        )?;
+        for (id, cat, minor) in [(20, 910, -90_000), (21, 911, -100), (22, 912, -5_000)] {
+            c.execute(
+                "INSERT INTO txn (id, account_id, booked_on, description_raw, description_norm,
+                                  amount_minor, currency, category_override_id, dedupe_hash)
+                 VALUES (?1, 1, '2026-02-02', 'x', 'x', ?2, 'EUR', ?3, ?4)",
+                params![id, minor, cat, format!("o{id}")],
+            )?;
+        }
+        // A category with a budget and no money this year is placed by the same order.
+        c.execute(
+            "INSERT INTO pl_category (id, name, kind, sort_order) VALUES (913, 'Delta', 'expense', 35)",
+            [],
+        )?;
+        c.execute(
+            "INSERT INTO budget (category_id, period, amount_minor) VALUES (913, '2026', 12000)",
+            [],
+        )?;
+        Ok(())
+    })
+    .unwrap();
+    let names = |db: &Db| -> Vec<String> {
+        db.with(|c| budget::matrix(c, 2026))
+            .unwrap()
+            .rows
+            .into_iter()
+            .map(|r| r.category_name)
+            .collect()
+    };
+    // Income, then spending in the person's order (10, 30, 35, 40, 50), then
+    // what has no category.
+    assert_eq!(
+        names(&db),
+        [
+            "Pay",
+            "Groceries",
+            "Beta",
+            "Delta",
+            "Gamma",
+            "Alpha",
+            "Uncategorised"
+        ]
+    );
+    // Dragging a category elsewhere changes the matrix with it.
+    db.with(|c| {
+        coin_heaven_lib::commands::settings::reorder_categories(c, &[910, 900, 911, 912, 913, 901])
+    })
+    .unwrap();
+    assert_eq!(
+        names(&db),
+        [
+            "Pay",
+            "Alpha",
+            "Groceries",
+            "Beta",
+            "Gamma",
+            "Delta",
+            "Uncategorised"
+        ]
+    );
+}

@@ -172,7 +172,29 @@ export function CashFlowAnalytics({
                           <Cell key={s.name} fill={s.color} />
                         ))}
                       </Pie>
-                      <Tooltip {...tip} />
+                      <Tooltip
+                        content={({ active, payload }) => {
+                          const p = payload?.[0];
+                          if (!active || !p) return null;
+                          const total = spend.reduce((a, x) => a + x.value, 0);
+                          const v = Number(p.value);
+                          return (
+                            <div className="rounded-lg border border-rule bg-surface px-3 py-2 text-[12px] shadow-card">
+                              <p className="flex items-center gap-1.5 text-ink">
+                                <span
+                                  className="size-2 rounded-full"
+                                  style={{ background: String(p.payload?.color ?? "var(--brass)") }}
+                                />
+                                {String(p.name ?? p.payload?.name ?? "")}
+                              </p>
+                              <p className="tnum mt-0.5 text-ink-2">
+                                {fmtMajor(v)}
+                                {total > 0 && ` · ${Math.round((v / total) * 100)} %`}
+                              </p>
+                            </div>
+                          );
+                        }}
+                      />
                     </PieChart>
                   </ResponsiveContainer>
                 </div>

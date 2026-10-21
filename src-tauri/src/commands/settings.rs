@@ -289,17 +289,19 @@ pub fn category_delete(
 /// Reorder a category, so the P&L reads in an order the user chose.
 #[tauri::command]
 pub fn category_reorder(state: State<'_, AppState>, ordered_ids: Vec<i64>) -> AppResult<()> {
-    state.db()?.with(|c| {
-        let tx = c.unchecked_transaction()?;
-        for (i, id) in ordered_ids.iter().enumerate() {
-            tx.execute(
-                "UPDATE pl_category SET sort_order = ?1 WHERE id = ?2",
-                rusqlite::params![(i as i64 + 1) * 10, id],
-            )?;
-        }
-        tx.commit()?;
-        Ok(())
-    })?;
+    state.db()?.with(|c| reorder_categories(c, &ordered_ids))?;
     state.backup.mark_dirty();
+    Ok(())
+}
+
+pub fn reorder_categories(c: &rusqlite::Connection, ordered_ids: &[i64]) -> AppResult<()> {
+    let tx = c.unchecked_transaction()?;
+    for (i, id) in ordered_ids.iter().enumerate() {
+        tx.execute(
+            "UPDATE pl_category SET sort_order = ?1 WHERE id = ?2",
+            rusqlite::params![(i as i64 + 1) * 10, id],
+        )?;
+    }
+    tx.commit()?;
     Ok(())
 }

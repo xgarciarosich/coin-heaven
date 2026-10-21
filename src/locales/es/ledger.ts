@@ -4,6 +4,7 @@ const s = (n: number) => (n === 1 ? "" : "s");
 
 export const ledger: Dict["ledger"] = {
   fromImport: "Importación",
+  searchSame: "Ver todo lo que tenga este nombre",
   anyImport: "Cualquiera",
   showingImport: (file, n) => `Mostrando las ${n} transacciones de «${file}».`,
   showAll: "Mostrar todo",
