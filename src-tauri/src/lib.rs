@@ -90,6 +90,7 @@ pub fn run() {
             commands::import::import_preview,
             commands::import::import_run,
             commands::import::import_batches,
+            commands::import::import_impact,
             commands::import::import_undo,
             commands::import::matching_pending_transfers,
             commands::import::matching_pending_splits,

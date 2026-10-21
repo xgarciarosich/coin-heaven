@@ -266,6 +266,9 @@ pub struct TxnFilter {
     pub to: Option<String>,
     pub search: Option<String>,
     pub needs_review: Option<bool>,
+    /// Only what one import brought in.
+    #[serde(default)]
+    pub import_batch_id: Option<i64>,
     pub limit: Option<i64>,
     pub offset: Option<i64>,
 }
@@ -296,6 +299,11 @@ pub struct LedgerRow {
     pub needs_review: bool,
     pub parent_txn_id: Option<i64>,
     pub reimbursement_count: i64,
+    /// The import that brought this line in; `None` for one typed by hand or
+    /// made by the sample.
+    pub import_batch_id: Option<i64>,
+    /// The file that import was read from.
+    pub import_file: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -350,13 +358,17 @@ pub fn txn_list(state: State<'_, AppState>, filter: TxnFilter) -> AppResult<Ledg
     if filter.needs_review == Some(true) {
         where_sql.push_str(" AND t.needs_review = 1");
     }
+    if let Some(v) = filter.import_batch_id {
+        push(" AND t.import_batch_id = ?", Box::new(v), &mut where_sql);
+    }
 
     state.db()?.with(|c| {
         let base = "FROM txn t
              JOIN account a ON a.id = t.account_id
              LEFT JOIN v_txn_effective e ON e.id = t.id
              LEFT JOIN pl_category k ON k.id = e.effective_category_id
-             LEFT JOIN project_event p ON p.id = t.project_id";
+             LEFT JOIN project_event p ON p.id = t.project_id
+             LEFT JOIN import_batch ib ON ib.id = t.import_batch_id";
 
         let count_sql = format!("SELECT count(*) {base}{where_sql}");
         let total: i64 = c.query_row(
@@ -374,7 +386,8 @@ pub fn txn_list(state: State<'_, AppState>, filter: TxnFilter) -> AppResult<Ledg
                     t.parent_txn_id,
                     (SELECT count(*) FROM txn r
                       WHERE r.parent_txn_id = t.id AND r.link_kind = 'reimbursement'),
-                    t.account_id, t.notes, t.description_norm
+                    t.account_id, t.notes, t.description_norm,
+                    t.import_batch_id, ib.source_filename
              {base}{where_sql}
              ORDER BY t.booked_on DESC, t.id DESC LIMIT ? OFFSET ?"
         );
@@ -406,6 +419,8 @@ pub fn txn_list(state: State<'_, AppState>, filter: TxnFilter) -> AppResult<Ledg
                         account_id: r.get(16)?,
                         notes: r.get(17)?,
                         merchant: crate::import::merchant::key(&r.get::<_, String>(18)?),
+                        import_batch_id: r.get(19)?,
+                        import_file: r.get(20)?,
                     })
                 },
             )?

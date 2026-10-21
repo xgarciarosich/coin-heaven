@@ -439,6 +439,8 @@ export interface TxnFilter {
   to?: string | null;
   search?: string | null;
   needsReview?: boolean | null;
+  /** Only what one import brought in. */
+  importBatchId?: number | null;
   limit?: number | null;
   offset?: number | null;
 }
@@ -464,6 +466,10 @@ export interface LedgerRow {
   needsReview: boolean;
   parentTxnId: number | null;
   reimbursementCount: number;
+  /** The import that brought this line in; null when typed by hand. */
+  importBatchId: number | null;
+  /** The file that import was read from. */
+  importFile: string | null;
 }
 
 export interface Ledger {

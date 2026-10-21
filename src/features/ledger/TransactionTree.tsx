@@ -390,7 +390,12 @@ export function Row({
           )}
           {row.parentTxnId && <Link2 className="size-3 shrink-0 text-ink-3" strokeWidth={1.75} />}
         </div>
-        <span className="text-[10.5px] text-ink-3">{row.accountName}</span>
+        <span className="text-[10.5px] text-ink-3">
+          {row.accountName}
+          {row.importFile && (
+            <span title={t.ledger.importedFrom(row.importFile)}> · {row.importFile}</span>
+          )}
+        </span>
       </td>
       <td className="py-1.5 pr-3 text-[12px] text-ink-2">
         {row.categoryName ?? <span className="text-ink-3">—</span>}

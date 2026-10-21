@@ -3,6 +3,11 @@ import type { Dict } from "../en";
 const s = (n: number) => (n === 1 ? "" : "s");
 
 export const ledger: Dict["ledger"] = {
+  fromImport: "Importación",
+  anyImport: "Cualquiera",
+  showingImport: (file, n) => `Mostrando las ${n} transacciones de «${file}».`,
+  showAll: "Mostrar todo",
+  importedFrom: (file) => `Importado desde ${file}`,
   title: "Cash flow y movimientos",
   lede: "Tus extractos y lo que haces con ellos: qué ha entrado, qué ha salido, en qué se ha ido y si el año va como esperabas.",
   tabs: {

@@ -2657,3 +2657,80 @@ fn a_bundle_can_be_put_in_an_event_with_or_without_a_category() {
     assert!(refused.is_err());
     b.assert_intact();
 }
+
+/* ------------------------------------------- every line knows its import -- */
+
+#[test]
+fn every_imported_line_names_its_import_and_can_be_listed_and_removed_by_it() {
+    let b = Book::new();
+    let acct = account(&b, "Main");
+    let jan = import(
+        b.db(),
+        acct,
+        "january.csv",
+        vec![
+            row("2026-01-03", "STREAMFLIX", -1299),
+            row("2026-01-05", "BAKERY", -450),
+        ],
+    );
+    // A second file with a wrong column: dated in another year, so it must be
+    // found whatever year the screen is on.
+    let bad = import(
+        b.db(),
+        acct,
+        "wrong-column.csv",
+        vec![
+            row("2025-11-01", "TICKET", -300_000),
+            row("2025-11-02", "TICKET", -300_001),
+        ],
+    );
+    // And one line typed by hand, with no import behind it.
+    exec(
+        b.db(),
+        "INSERT INTO txn (account_id, booked_on, amount_minor, description_raw,
+                          description_norm, dedupe_hash)
+         VALUES (?1, '2026-02-01', -500, 'BY HAND', 'by hand', 'manual-1')",
+        params![acct],
+    );
+
+    let list = |batch: Option<i64>| {
+        txn_list(
+            b.st(),
+            TxnFilter {
+                import_batch_id: batch,
+                limit: Some(100),
+                ..Default::default()
+            },
+        )
+        .unwrap()
+    };
+    let all = list(None);
+    assert_eq!(all.total, 5);
+    let file_of = |d: &str| {
+        all.rows
+            .iter()
+            .find(|r| r.description == d)
+            .map(|r| (r.import_batch_id, r.import_file.clone()))
+            .unwrap()
+    };
+    assert_eq!(
+        file_of("STREAMFLIX"),
+        (Some(jan.batch_id), Some("january.csv".into()))
+    );
+    assert_eq!(file_of("TICKET").1.as_deref(), Some("wrong-column.csv"));
+    assert_eq!(file_of("BY HAND"), (None, None));
+
+    // Filtering by an import lists exactly its lines, from any year.
+    let only_bad = list(Some(bad.batch_id));
+    assert_eq!(only_bad.total, 2);
+    assert!(only_bad.rows.iter().all(|r| r.description == "TICKET"));
+
+    // What removing it would do is said first, then it is done, and nothing
+    // else is touched.
+    let impact = b.db().with(|c| runner::impact(c, bad.batch_id)).unwrap();
+    assert_eq!((impact.total, impact.touched), (2, 0));
+    runner::undo(b.db(), bad.batch_id, true).unwrap();
+    assert_eq!(list(None).total, 3);
+    assert_eq!(list(Some(jan.batch_id)).total, 2);
+    b.assert_intact();
+}

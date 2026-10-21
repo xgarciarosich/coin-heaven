@@ -367,7 +367,8 @@ export const mockResponses: Record<string, (args?: never) => unknown> = {
     incomeMinor: 240000, expenseMinor: -154030, netMinor: 85970, uncategorisedCount: 6,
   }),
   txn_delete: () => 1,
-  txn_list: () => {
+  txn_list: ((args?: { filter?: { importBatchId?: number | null } }) => {
+    const want = args?.filter?.importBatchId ?? null;
     const shops = [
       { d: "COMPRA TARJETA 5487 MERCADONA VALENCIA", c: 5, n: "Food & groceries", a: -4520 },
       { d: "RECIBO IBERDROLA CLIENTES SAU", c: 4, n: "Housing", a: -7180 },
@@ -406,6 +407,9 @@ export const mockResponses: Record<string, (args?: never) => unknown> = {
           needsReview: s.c === null,
           parentTxnId: null,
           reimbursementCount: 0,
+          // Two imports: the January file, and (earlier months) the one before.
+          importBatchId: m >= 4 ? 3 : 2,
+          importFile: m >= 4 ? "movimientos-2026-01.csv" : "ahorro-2025.csv",
         });
       }
     }
@@ -414,9 +418,11 @@ export const mockResponses: Record<string, (args?: never) => unknown> = {
       amountMinor: -12000, netMinor: -9000, currency: "EUR", accountId: 1, accountName: "Santander corriente",
       notes: null, merchant: "trattoria", categoryId: 7, categoryName: "Leisure & travel", projectId: 1, projectName: "Venice Trip 2026",
       isNeutralTransfer: false, needsReview: false, parentTxnId: null, reimbursementCount: 1,
+      importBatchId: null, importFile: null,
     });
-    return { total: rows.length, rows };
-  },
+    const shown = want === null ? rows : rows.filter((r) => r.importBatchId === want);
+    return { total: shown.length, rows: shown };
+  }) as never,
   snapshot_list: () => {
     const at = (
       takenOn: string,

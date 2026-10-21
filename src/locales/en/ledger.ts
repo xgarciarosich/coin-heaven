@@ -1,6 +1,11 @@
 const s = (n: number) => (n === 1 ? "" : "s");
 
 export const ledger = {
+  fromImport: "Import",
+  anyImport: "Any",
+  showingImport: (file: string, n: number) => `Showing the ${n} transaction${n === 1 ? "" : "s"} from “${file}”.`,
+  showAll: "Show all",
+  importedFrom: (file: string) => `Imported from ${file}`,
   title: "Cash flow & transactions",
   lede: "Statements in, and everything that happens to them afterwards: what came in, what went out, what each thing was for, and whether the year is going to plan.",
   tabs: {

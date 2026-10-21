@@ -14,9 +14,11 @@ import { api } from "@/lib/ipc";
 import { fmtCompact, fmtMoney, majorToMinor } from "@/lib/money";
 import type {
   Account,
+  Batch,
   CashflowSummary,
   Category,
   EventItem,
+  ImportImpact,
   Ledger,
   LedgerRow,
   Matrix,
@@ -28,6 +30,7 @@ import { cn } from "@/lib/utils";
 import { useT } from "@/lib/i18n";
 import { ImportView } from "@/features/import/ImportView";
 import { AutoCategorise } from "./AutoCategorise";
+import { RemoveImport } from "@/features/import/RemoveImport";
 import { BudgetsView } from "./BudgetsView";
 import { CategoriesTab } from "./CategoriesTab";
 import { MonthlyPlan } from "./MonthlyPlan";
@@ -84,6 +87,10 @@ export function LedgerView({ modules }: { modules: ModuleToggles | null }) {
   const [projectId, setProjectId] = useState<number | null>(null);
   const [categoryId, setCategoryId] = useState<number | null>(null);
   const [search, setSearch] = useState("");
+  // Only what one import brought in — to check it, or to take it back out.
+  const [batchId, setBatchId] = useState<number | null>(null);
+  const [batches, setBatches] = useState<Batch[]>([]);
+  const [removing, setRemoving] = useState<ImportImpact | null>(null);
   const [onlyReview, setOnlyReview] = useState(false);
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [editing, setEditing] = useState<number | null>(null);
@@ -104,11 +111,18 @@ export function LedgerView({ modules }: { modules: ModuleToggles | null }) {
   );
 
   const loadStatic = useCallback(() => {
-    Promise.all([api.categoryList(), api.eventList(), api.accountList(), api.txnYears()])
-      .then(([c, e, a, ys]) => {
+    Promise.all([
+      api.categoryList(),
+      api.eventList(),
+      api.accountList(),
+      api.txnYears(),
+      api.importBatches(),
+    ])
+      .then(([c, e, a, ys, bs]) => {
         setCategories(c);
         setEvents(e);
         setAccounts(a);
+        setBatches(bs);
         // The years with data, plus this one: a budget for a year that has
         // only just begun has to be writable before its first statement.
         const now = new Date().getFullYear();
@@ -123,8 +137,11 @@ export function LedgerView({ modules }: { modules: ModuleToggles | null }) {
     const { from, to } = range;
     Promise.all([
       api.txnList({
-        from,
-        to,
+        // One import is read whole, whatever years its lines fall in: a file
+        // with a wrong column is exactly the one whose dates are off.
+        from: batchId === null ? from : null,
+        to: batchId === null ? to : null,
+        importBatchId: batchId,
         accountId,
         projectId,
         categoryId,
@@ -149,7 +166,7 @@ export function LedgerView({ modules }: { modules: ModuleToggles | null }) {
         setMatrix(mx);
       })
       .catch((e: unknown) => setError(msg(e)));
-  }, [range, year, accountId, projectId, categoryId, search, onlyReview]);
+  }, [range, year, accountId, projectId, categoryId, search, onlyReview, batchId]);
 
   useEffect(loadStatic, [loadStatic]);
   useEffect(() => {
@@ -320,6 +337,21 @@ export function LedgerView({ modules }: { modules: ModuleToggles | null }) {
                 </option>
               ))}
             </SelectField>
+            <SelectField
+              label={t.ledger.fromImport}
+              value={batchId ?? ""}
+              onChange={(e) => {
+                setBatchId(e.currentTarget.value ? Number(e.currentTarget.value) : null);
+                setRemoving(null);
+              }}
+            >
+              <option value="">{t.ledger.anyImport}</option>
+              {batches.map((b) => (
+                <option key={b.id} value={b.id}>
+                  {b.sourceFilename ?? "—"} · {b.importedAt.slice(0, 10)}
+                </option>
+              ))}
+            </SelectField>
             <TextField
               label={t.ledger.search}
               value={search}
@@ -412,6 +444,46 @@ export function LedgerView({ modules }: { modules: ModuleToggles | null }) {
                   ))}
                 </div>
               </Panel>
+            )}
+
+            {batchId !== null && (
+              <div className="space-y-3">
+                <Banner>
+                  {t.ledger.showingImport(
+                    batches.find((b) => b.id === batchId)?.sourceFilename ?? "—",
+                    ledger?.total ?? 0,
+                  )}
+                  <span className="ml-3 inline-flex gap-2 align-middle">
+                    <Button
+                      variant="danger"
+                      onClick={() =>
+                        api
+                          .importImpact(batchId)
+                          .then(setRemoving)
+                          .catch((e: unknown) => setError(msg(e)))
+                      }
+                    >
+                      {t.importer.undo}
+                    </Button>
+                    <Button variant="ghost" onClick={() => setBatchId(null)}>
+                      {t.ledger.showAll}
+                    </Button>
+                  </span>
+                </Banner>
+                {removing && (
+                  <RemoveImport
+                    batchId={batchId}
+                    impact={removing}
+                    onCancel={() => setRemoving(null)}
+                    onDone={() => {
+                      setRemoving(null);
+                      setBatchId(null);
+                      refreshAll();
+                    }}
+                    onError={setError}
+                  />
+                )}
+              </div>
             )}
 
             {tidying && (

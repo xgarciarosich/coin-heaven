@@ -21,6 +21,7 @@ import {
   TextField,
 } from "@/components/ui/controls";
 import { api } from "@/lib/ipc";
+import { RemoveImport } from "./RemoveImport";
 import { fmtMoney } from "@/lib/money";
 import type {
   Account,
@@ -145,20 +146,6 @@ export function ImportView({
         setInspection(null);
       })
       .finally(() => setBusy(null));
-  };
-
-  const removeImport = (id: number, everything: boolean) => {
-    api
-      .importUndo(id, everything)
-      .then((n) => {
-        setRemoving(null);
-        setSummary(null);
-        setNote(t.importer.remove.done(n));
-        refresh();
-        // The ledger behind this tab has just lost those rows.
-        onImported?.();
-      })
-      .catch((e: unknown) => setError(msg(e)));
   };
 
   const runImport = () => {
@@ -566,41 +553,20 @@ export function ImportView({
         />
 
         {removing && (
-          <div
-            role="alertdialog"
-            aria-label={t.importer.remove.title(removing.impact.filename ?? "—")}
-            className="space-y-3 rounded-[10px] border border-negative/50 bg-negative/[0.05] px-5 py-4"
-          >
-            <p className="text-[13px] font-medium text-ink">
-              {t.importer.remove.title(removing.impact.filename ?? "—")}
-            </p>
-            <div className="space-y-1.5 text-[12.5px] leading-[1.65] text-ink-2">
-              <p>{t.importer.remove.body(removing.impact.total)}</p>
-              {removing.impact.touched > 0 && (
-                <p className="text-ink">{t.importer.remove.touched(removing.impact.touched)}</p>
-              )}
-              {removing.impact.linkedFromElsewhere > 0 && (
-                <p>{t.importer.remove.linked(removing.impact.linkedFromElsewhere)}</p>
-              )}
-              <p className="font-medium text-negative">{t.importer.remove.permanent}</p>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <Button variant="ghost" onClick={() => setRemoving(null)}>
-                {t.common.cancel}
-              </Button>
-              {removing.impact.touched > 0 && removing.impact.total > removing.impact.touched && (
-                <Button
-                  variant="secondary"
-                  onClick={() => removeImport(removing.id, false)}
-                >
-                  {t.importer.remove.onlyUntouched(removing.impact.total - removing.impact.touched)}
-                </Button>
-              )}
-              <Button variant="danger" onClick={() => removeImport(removing.id, true)}>
-                {t.importer.remove.all(removing.impact.total)}
-              </Button>
-            </div>
-          </div>
+          <RemoveImport
+            batchId={removing.id}
+            impact={removing.impact}
+            onCancel={() => setRemoving(null)}
+            onDone={(n) => {
+              setRemoving(null);
+              setSummary(null);
+              setNote(t.importer.remove.done(n));
+              refresh();
+              // The ledger behind this tab has just lost those rows.
+              onImported?.();
+            }}
+            onError={setError}
+          />
         )}
 
         {batches.length > 0 && (
