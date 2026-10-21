@@ -13,11 +13,22 @@ export interface PersonShare {
   left: number;
 }
 
+/** One shared box and what each person's part of it is. */
+export interface SharedLine {
+  name: string;
+  kind: PlanItem["kind"];
+  total: number;
+  a: number;
+  b: number;
+}
+
 export interface CoupleSplit {
   /** Person A's share of what is shared, in basis points (5000 = half). */
   shareABps: number;
   sharedSpend: number;
   sharedIncome: number;
+  /** Every shared box, in the order they were arranged. */
+  shared: SharedLine[];
   a: PersonShare;
   b: PersonShare;
 }
@@ -49,8 +60,19 @@ export function splitPlan(items: readonly PlanItem[], setup: PlanSetup): CoupleS
     const a = Math.round((total * shareABps) / 10_000);
     return [a, total - a] as const;
   };
-  const [spendA, spendB] = part(sharedSpend);
-  const [inA, inB] = part(sharedIncome);
+  // Each shared box is divided on its own, and a person's share is the sum of
+  // their parts, so what the cards say and what the lines say never differ by
+  // a cent of rounding.
+  const shared: SharedLine[] = items
+    .filter((i) => (i.owner ?? "shared") === "shared" && i.amountMinor !== 0)
+    .map((i) => {
+      const [a, b] = part(i.amountMinor);
+      return { name: i.name, kind: i.kind, total: i.amountMinor, a, b };
+    });
+  const spendA = shared.filter((l) => l.kind === "expense").reduce((n, l) => n + l.a, 0);
+  const spendB = sharedSpend - spendA;
+  const inA = shared.filter((l) => l.kind === "income").reduce((n, l) => n + l.a, 0);
+  const inB = sharedIncome - inA;
   const person = (income: number, own: number, s: number, si: number): PersonShare => ({
     income,
     own,
@@ -62,6 +84,7 @@ export function splitPlan(items: readonly PlanItem[], setup: PlanSetup): CoupleS
     shareABps,
     sharedSpend,
     sharedIncome,
+    shared,
     a: person(incomeA, sum("a", "expense"), spendA, inA),
     b: person(incomeB, sum("b", "expense"), spendB, inB),
   };

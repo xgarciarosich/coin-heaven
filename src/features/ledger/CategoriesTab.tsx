@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Plus, Trash2, X } from "lucide-react";
 import { Panel, PanelBody, PanelHead } from "@/components/ui/panel";
 import { Banner, Button, SelectField, TextField } from "@/components/ui/controls";
@@ -6,13 +6,13 @@ import { api } from "@/lib/ipc";
 import type { Category, CategoryUsage, Rule } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { useT } from "@/lib/i18n";
+import { PALETTE, nextColour } from "@/lib/colours";
+import { move } from "@/lib/useReorder";
+import { Grip, Reorderable } from "@/components/ui/reorderable";
 
 const msg = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
-const SWATCHES = [
-  "#f97316", "#eab308", "#22c55e", "#06b6d4", "#a855f7",
-  "#ef4444", "#8b5cf6", "#64748b", "#16a34a", "#94a3b8",
-];
+const SWATCHES = PALETTE;
 
 /**
  * The categories transactions are filed under, and the rules that file them.
@@ -49,7 +49,12 @@ export function CategoriesTab({
 /* ---------------------------------------------------------- categories -- */
 
 type Draft = { name: string; kind: string; color: string };
-const BLANK: Draft = { name: "", kind: "expense", color: SWATCHES[0]! };
+const blank = (used: (string | null)[]): Draft => ({
+  name: "",
+  kind: "expense",
+  // A colour nobody is using yet, so a new category is told apart at a glance.
+  color: nextColour(used),
+});
 
 function CategoryManager({
   categories,
@@ -66,6 +71,14 @@ function CategoryManager({
   const [editing, setEditing] = useState<number | null>(null);
   const [adding, setAdding] = useState(false);
   const [deleting, setDeleting] = useState<{ cat: Category; usage: CategoryUsage } | null>(null);
+  // Categories in the order shown, moved live while one is dragged.
+  const [order, setOrder] = useState<number[]>(() => categories.map((c) => c.id));
+  useEffect(() => setOrder(categories.map((c) => c.id)), [categories]);
+  const orderNow = useRef(order);
+  orderNow.current = order;
+  const shown = order
+    .map((id) => categories.find((c) => c.id === id))
+    .filter((c): c is Category => c !== undefined);
 
   const commit = (id: number | null, d: Draft) =>
     api
@@ -106,11 +119,29 @@ function CategoryManager({
           }
         />
 
-        {adding && <CategoryForm initial={BLANK} isNew onSave={(d) => commit(null, d)} />}
+        {adding && (
+          <CategoryForm
+            initial={blank(categories.map((c) => c.color))}
+            isNew
+            onSave={(d) => commit(null, d)}
+          />
+        )}
 
-        <div className="divide-y divide-rule">
-          {categories.map((c) =>
-            editing === c.id ? (
+        <Reorderable
+          keys={order}
+          className="divide-y divide-rule"
+          onMove={(from, to) => setOrder((o) => move(o, from, to))}
+          onDrop={() =>
+            api
+              .categoryReorder(orderNow.current)
+              .then(onChanged)
+              .catch((e: unknown) => onError(msg(e)))
+          }
+        >
+          {(id, _i, item, grip, dragging) => {
+            const c = shown.find((x) => x.id === id);
+            if (!c) return null;
+            return editing === c.id ? (
               <CategoryForm
                 key={c.id}
                 initial={{ name: c.name, kind: c.kind, color: c.color ?? SWATCHES[0]! }}
@@ -118,7 +149,15 @@ function CategoryManager({
                 onCancel={() => setEditing(null)}
               />
             ) : (
-              <div key={c.id} className="flex items-center gap-4 px-5 py-2.5">
+              <div
+                key={c.id}
+                {...item}
+                className={cn(
+                  "group flex items-center gap-4 px-5 py-2.5",
+                  dragging && "bg-brass-wash/40",
+                )}
+              >
+                <Grip handle={grip} label={t.settings.dragCategory} className="-ml-2" />
                 <span
                   className="size-2.5 shrink-0 rounded-full"
                   style={{ background: c.color ?? "var(--ink-3)" }}
@@ -157,9 +196,9 @@ function CategoryManager({
                   <Trash2 className="size-3" strokeWidth={1.75} />
                 </Button>
               </div>
-            ),
-          )}
-        </div>
+            );
+          }}
+        </Reorderable>
 
         <p className="border-t border-rule px-5 py-3 text-[11px] leading-[1.6] text-ink-3">
           {t.settings.categoriesNote}

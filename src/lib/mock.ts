@@ -104,6 +104,14 @@ const mockClasses = [
     { key: "other_debt", name: "Other debt", kind: "liability", color: "#f87171", sortOrder: 80, countsFire: false, lineCount: 1 },
 ];
 
+/** Categories, kept so a reorder in dev mode survives a refresh. */
+const mockCategories = [
+    { id: 1, parentId: null, name: "Salary", kind: "income", color: "#22c55e", sortOrder: 10, txnCount: 12 },
+    { id: 4, parentId: null, name: "Housing", kind: "expense", color: "#f97316", sortOrder: 40, txnCount: 24 },
+    { id: 5, parentId: null, name: "Food & groceries", kind: "expense", color: "#eab308", sortOrder: 50, txnCount: 96 },
+    { id: 7, parentId: null, name: "Leisure & travel", kind: "expense", color: "#a855f7", sortOrder: 70, txnCount: 31 },
+];
+
 export const mockParams: SimParams = {
   horizonYears: 10,
   startMonth: null,
@@ -346,12 +354,14 @@ export const mockResponses: Record<string, (args?: never) => unknown> = {
   ],
   recovery_take_phrase: () =>
     "ridge canvas lumber orbit palace tenant fossil marble ginger walnut copper anchor",
-  category_list: () => [
-    { id: 1, parentId: null, name: "Salary", kind: "income", color: "#22c55e", sortOrder: 10, txnCount: 12 },
-    { id: 4, parentId: null, name: "Housing", kind: "expense", color: "#f97316", sortOrder: 40, txnCount: 24 },
-    { id: 5, parentId: null, name: "Food & groceries", kind: "expense", color: "#eab308", sortOrder: 50, txnCount: 96 },
-    { id: 7, parentId: null, name: "Leisure & travel", kind: "expense", color: "#a855f7", sortOrder: 70, txnCount: 31 },
-  ],
+  category_reorder: (a: unknown) => {
+    const { orderedIds } = a as { orderedIds: number[] };
+    orderedIds.forEach((id, i) => {
+      const c = mockCategories.find((x) => x.id === id);
+      if (c) c.sortOrder = (i + 1) * 10;
+    });
+  },
+  category_list: () => [...mockCategories].sort((a, b) => a.sortOrder - b.sortOrder),
   event_list: () => [
     { id: 1, name: "Venice Trip 2026", defaultCategoryId: 7, defaultCategoryName: "Leisure & travel",
       startsOn: "2026-05-01", endsOn: "2026-05-08", budgetMinor: 150000, isClosed: false,

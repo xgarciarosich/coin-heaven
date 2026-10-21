@@ -750,6 +750,55 @@ function Sheet({
               </div>
             ))}
           </div>
+          {split.shared.length > 0 && (
+            <div className="mt-3 overflow-hidden rounded-[10px] border border-rule bg-surface">
+              <p className="eyebrow border-b border-rule px-4 py-2">{p.sharedBreakdown}</p>
+              <table className="w-full text-[12px]">
+                <thead>
+                  <tr className="text-ink-3">
+                    <th className="px-4 py-1.5 text-left font-normal">{p.box}</th>
+                    <th className="px-3 py-1.5 text-right font-normal">{p.total}</th>
+                    <th className="px-3 py-1.5 text-right font-normal">{nameA}</th>
+                    <th className="px-4 py-1.5 text-right font-normal">{nameB}</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {split.shared.map((l, i) => (
+                    <tr key={i} className="border-t border-rule/60">
+                      <td className="max-w-0 truncate px-4 py-1.5 text-ink">
+                        <span
+                          className={cn(
+                            "mr-1.5 inline-block w-3 text-center",
+                            l.kind === "income" ? "text-positive" : "text-negative",
+                          )}
+                        >
+                          {l.kind === "income" ? "+" : "−"}
+                        </span>
+                        {l.name || (l.kind === "income" ? p.income : p.spend)}
+                      </td>
+                      <td className="tnum px-3 py-1.5 text-right text-ink-3">{money(l.total)}</td>
+                      <td className="tnum px-3 py-1.5 text-right text-ink">{money(l.a)}</td>
+                      <td className="tnum px-4 py-1.5 text-right text-ink">{money(l.b)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr className="border-t border-rule bg-paper-sunk/40 font-medium">
+                    <td className="px-4 py-1.5 text-ink-2">{p.sharedSpending}</td>
+                    <td className="tnum px-3 py-1.5 text-right text-ink-2">
+                      {money(split.sharedSpend)}
+                    </td>
+                    <td className="tnum px-3 py-1.5 text-right text-ink">
+                      {money(split.a.sharedSpend)}
+                    </td>
+                    <td className="tnum px-4 py-1.5 text-right text-ink">
+                      {money(split.b.sharedSpend)}
+                    </td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          )}
           <p className="mt-2.5 text-[11px] leading-[1.6] text-ink-3">
             {split.sharedSpend > 0
               ? setup.split === "income"

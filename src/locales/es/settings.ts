@@ -1,6 +1,7 @@
 import type { Dict } from "../en";
 
 export const settings: Dict["settings"] = {
+  dragCategory: "Arrastra para reordenar esta categoría",
   eyebrow: "Ajustes",
   title: "Cómo funciona Coin Heaven",
   lede: "Idioma, región y qué partes de la app ves; y, en IA, quién responde al asistente y qué se le puede mandar. Nada de aquí borra datos.",

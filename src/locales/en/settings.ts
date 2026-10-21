@@ -1,4 +1,5 @@
 export const settings = {
+  dragCategory: "Drag to reorder this category",
   eyebrow: "Settings",
   title: "How Coin Heaven behaves",
   lede: "Language, region and which parts of the app you see — and, under AI, who answers the assistant and what it may be sent. Nothing here deletes data.",
