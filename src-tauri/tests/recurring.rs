@@ -2,7 +2,7 @@
 //! amount, a bill that wanders, and a shop visited often that is neither.
 
 use chrono::NaiveDate;
-use coin_heaven_lib::commands::recurring::detect;
+use coin_heaven_lib::commands::recurring::{detect, set_recurring};
 use coin_heaven_lib::db::Db;
 use rusqlite::params;
 use secrecy::SecretString;
@@ -134,4 +134,51 @@ fn what_has_stopped_is_listed_but_not_counted() {
     // Active ones come first.
     let first_stopped = r.items.iter().position(|i| !i.active).unwrap();
     assert!(r.items[first_stopped..].iter().all(|i| !i.active));
+}
+
+#[test]
+fn a_payment_the_person_says_is_not_recurring_leaves_the_list_and_the_totals_and_can_come_back() {
+    let (_d, db) = book();
+    let today = d("2026-12-20");
+    let before = db.with(|c| detect(c, today)).unwrap();
+    let stream = before
+        .items
+        .iter()
+        .find(|i| i.name.contains("STREAMFLIX"))
+        .unwrap();
+    let key = stream.key.clone();
+
+    db.with(|c| set_recurring(c, &key, false)).unwrap();
+    let after = db.with(|c| detect(c, today)).unwrap();
+    assert!(
+        after.items.iter().all(|i| i.key != key),
+        "gone from the list"
+    );
+    assert!(
+        after.hidden.iter().any(|i| i.key == key),
+        "set apart, not forgotten"
+    );
+    assert_eq!(
+        after.yearly_minor,
+        before.yearly_minor - stream.yearly_minor,
+        "and no longer counted"
+    );
+    // The ledger itself is untouched.
+    let n: i64 = db
+        .with(|c| {
+            Ok(c.query_row(
+                "SELECT count(*) FROM txn WHERE description_raw LIKE 'STREAMFLIX%'",
+                [],
+                |r| r.get(0),
+            )?)
+        })
+        .unwrap();
+    assert_eq!(n, 12);
+
+    // Saying it twice does not duplicate, and putting it back restores it.
+    db.with(|c| set_recurring(c, &key, false)).unwrap();
+    db.with(|c| set_recurring(c, &key, true)).unwrap();
+    let back = db.with(|c| detect(c, today)).unwrap();
+    assert_eq!(back.yearly_minor, before.yearly_minor);
+    assert!(back.hidden.is_empty());
 }

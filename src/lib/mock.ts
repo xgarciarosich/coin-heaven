@@ -26,6 +26,7 @@ interface MockLine {
   debtMinor: number;
 }
 let sampleLoaded = false;
+const mockNotRecurring = new Set<string>();
 interface MockPlanItem { kind: "income" | "expense"; name: string; amountMinor: number; owner?: "shared" | "a" | "b" }
 const mockSetups = new Map<string, Record<string, string | number>>();
 const individual = { mode: "individual", personA: "", personB: "", split: "equal", customABps: 5000 };
@@ -362,6 +363,10 @@ export const mockResponses: Record<string, (args?: never) => unknown> = {
     });
   },
   category_list: () => [...mockCategories].sort((a, b) => a.sortOrder - b.sortOrder),
+  event_save: () => 2,
+  event_set_closed: () => undefined,
+  event_delete: () => undefined,
+  event_usage: () => ({ name: "Venice Trip 2026", defaultCategoryName: "Leisure & travel", txnCount: 14, txnOnDefault: 9, ruleCount: 1 }),
   event_list: () => [
     { id: 1, name: "Venice Trip 2026", defaultCategoryId: 7, defaultCategoryName: "Leisure & travel",
       startsOn: "2026-05-01", endsOn: "2026-05-08", budgetMinor: 150000, isClosed: false,
@@ -684,17 +689,26 @@ export const mockResponses: Record<string, (args?: never) => unknown> = {
     { holdingId: 4, name: "Bitcoin", symbolUsed: null, currency: null, stored: 0, leftOut: 0, from: null, to: null, problem: "other_currency" },
   ],
   market_clear: () => 26,
-  recurring_list: () => ({
-    monthlyMinor: 5430,
-    yearlyMinor: 65160,
-    items: [
-      { name: "FIBRELINE INTERNET", categoryName: "Subscriptions", every: "monthly", typicalMinor: 3990, varies: false, count: 14, firstOn: "2025-08-08", lastOn: "2026-09-08", nextOn: "2026-10-08", yearlyMinor: 48545, active: true },
-      { name: "FITCLUB GYM", categoryName: "Health", every: "monthly", typicalMinor: 3400, varies: false, count: 14, firstOn: "2025-08-15", lastOn: "2026-09-15", nextOn: "2026-10-15", yearlyMinor: 41366, active: true },
-      { name: "ELECTRA ENERGY", categoryName: "Housing", every: "monthly", typicalMinor: 8900, varies: true, count: 14, firstOn: "2025-08-05", lastOn: "2026-09-05", nextOn: "2026-10-05", yearlyMinor: 108283, active: true },
-      { name: "SAFEHOME INSURANCE", categoryName: null, every: "yearly", typicalMinor: 18000, varies: false, count: 2, firstOn: "2025-03-15", lastOn: "2026-03-15", nextOn: "2027-03-15", yearlyMinor: 18000, active: true },
-      { name: "OLDGYM CLUB", categoryName: "Health", every: "monthly", typicalMinor: 3000, varies: false, count: 3, firstOn: "2026-01-20", lastOn: "2026-03-20", nextOn: "2026-04-19", yearlyMinor: 36500, active: false },
-    ],
-  }),
+  recurring_list: () => {
+    const all = [
+      { key: "fibreline|monthly", name: "FIBRELINE INTERNET", categoryName: "Subscriptions", every: "monthly", typicalMinor: 3990, varies: false, count: 14, firstOn: "2025-08-08", lastOn: "2026-09-08", nextOn: "2026-10-08", yearlyMinor: 48545, active: true },
+      { key: "fitclub|monthly", name: "FITCLUB GYM", categoryName: "Health", every: "monthly", typicalMinor: 3400, varies: false, count: 14, firstOn: "2025-08-15", lastOn: "2026-09-15", nextOn: "2026-10-15", yearlyMinor: 41366, active: true },
+      { key: "electra|monthly", name: "ELECTRA ENERGY", categoryName: "Housing", every: "monthly", typicalMinor: 8900, varies: true, count: 14, firstOn: "2025-08-05", lastOn: "2026-09-05", nextOn: "2026-10-05", yearlyMinor: 108283, active: true },
+      { key: "safehome|monthly", name: "SAFEHOME INSURANCE", categoryName: null, every: "yearly", typicalMinor: 18000, varies: false, count: 2, firstOn: "2025-03-15", lastOn: "2026-03-15", nextOn: "2027-03-15", yearlyMinor: 18000, active: true },
+      { key: "oldgym|monthly", name: "OLDGYM CLUB", categoryName: "Health", every: "monthly", typicalMinor: 3000, varies: false, count: 3, firstOn: "2026-01-20", lastOn: "2026-03-20", nextOn: "2026-04-19", yearlyMinor: 36500, active: false }];
+    const shown = all.filter((i) => !mockNotRecurring.has(i.key));
+    const yearly = shown.filter((i) => i.active).reduce((a, i) => a + i.yearlyMinor, 0);
+    return {
+      monthlyMinor: Math.round(yearly / 12),
+      yearlyMinor: yearly,
+      items: shown,
+      hidden: all.filter((i) => mockNotRecurring.has(i.key)),
+    };
+  },
+  recurring_set: ((args: { key: string; isRecurring: boolean }) => {
+    if (args.isRecurring) mockNotRecurring.delete(args.key);
+    else mockNotRecurring.add(args.key);
+  }) as never,
   data_export: () => ({
     folder: "~/Documents/Coin Heaven export 2026-10-13",
     files: [

@@ -188,8 +188,40 @@ pub fn event_save(
     check_date("start date", &input.starts_on)?;
     check_date("end date", &input.ends_on)?;
     let blank = |v: Option<String>| v.filter(|s| !s.trim().is_empty());
+    if let (Some(a), Some(b)) = (blank(input.starts_on.clone()), blank(input.ends_on.clone())) {
+        if b < a {
+            return Err(AppError::Invalid(
+                "an event cannot end before it starts".into(),
+            ));
+        }
+    }
+    if input.budget_minor.is_some_and(|b| b < 0) {
+        return Err(AppError::Invalid("a budget cannot be negative".into()));
+    }
 
     let id = state.db()?.with(|c| {
+        // Said in words, rather than as the database's own refusal.
+        let taken: i64 = c.query_row(
+            "SELECT count(*) FROM project_event WHERE name = ?1 COLLATE NOCASE AND id IS NOT ?2",
+            rusqlite::params![input.name.trim(), id],
+            |r| r.get(0),
+        )?;
+        if taken > 0 {
+            return Err(AppError::Invalid(format!(
+                "an event called {} already exists; choose another name",
+                input.name.trim()
+            )));
+        }
+        let category: i64 = c.query_row(
+            "SELECT count(*) FROM pl_category WHERE id = ?1",
+            rusqlite::params![input.default_category_id],
+            |r| r.get(0),
+        )?;
+        if category == 0 {
+            return Err(AppError::Invalid(
+                "that category no longer exists — reload and try again".into(),
+            ));
+        }
         let p = rusqlite::params![
             input.name.trim(),
             input.default_category_id,
@@ -241,16 +273,79 @@ pub fn event_set_closed(state: State<'_, AppState>, id: i64, closed: bool) -> Ap
 
 /// Deleting an event releases its transactions (the FK is ON DELETE SET NULL)
 /// rather than taking them with it.
+/// What deleting an event touches, so it can be said before anything is.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct EventUsage {
+    pub name: String,
+    pub default_category_name: String,
+    /// Transactions put in the event.
+    pub txn_count: i64,
+    /// Of those, how many have no category of their own and so are filed under
+    /// the event's category only because they are in it.
+    pub txn_on_default: i64,
+    /// Rules that put things in this event; they go with it.
+    pub rule_count: i64,
+}
+
 #[tauri::command]
-pub fn event_delete(state: State<'_, AppState>, id: i64) -> AppResult<()> {
-    state.db()?.with(|c| {
-        c.execute(
-            "DELETE FROM project_event WHERE id = ?1",
+pub fn event_usage(state: State<'_, AppState>, id: i64) -> AppResult<EventUsage> {
+    state.db()?.with(|c| usage_of(c, id))
+}
+
+pub fn usage_of(c: &rusqlite::Connection, id: i64) -> AppResult<EventUsage> {
+    let (name, category): (String, String) = c
+        .query_row(
+            "SELECT p.name, k.name FROM project_event p
+             JOIN pl_category k ON k.id = p.default_category_id WHERE p.id = ?1",
+            [id],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .map_err(|_| AppError::Invalid("that event no longer exists".into()))?;
+    let count = |sql: &str| -> AppResult<i64> { Ok(c.query_row(sql, [id], |r| r.get(0))?) };
+    Ok(EventUsage {
+        name,
+        default_category_name: category,
+        txn_count: count("SELECT count(*) FROM txn WHERE project_id = ?1")?,
+        txn_on_default: count(
+            "SELECT count(*) FROM txn WHERE project_id = ?1 AND category_override_id IS NULL",
+        )?,
+        rule_count: count("SELECT count(*) FROM categorization_rule WHERE set_project_id = ?1")?,
+    })
+}
+
+/// Delete an event. Its transactions stay; they just stop being part of it.
+/// A transaction with no category of its own was filed under the event's
+/// category only by being in it, so `keep_category` writes that category onto
+/// it first, instead of leaving it uncategorised.
+#[tauri::command]
+pub fn event_delete(
+    state: State<'_, AppState>,
+    id: i64,
+    keep_category: Option<bool>,
+) -> AppResult<()> {
+    state
+        .db()?
+        .with(|c| delete_event(c, id, keep_category.unwrap_or(true)))?;
+    state.backup.mark_dirty();
+    Ok(())
+}
+
+pub fn delete_event(c: &rusqlite::Connection, id: i64, keep_category: bool) -> AppResult<()> {
+    let tx = c.unchecked_transaction()?;
+    if keep_category {
+        tx.execute(
+            "UPDATE txn SET category_override_id =
+                    (SELECT default_category_id FROM project_event WHERE id = ?1)
+              WHERE project_id = ?1 AND category_override_id IS NULL",
             rusqlite::params![id],
         )?;
-        Ok(())
-    })?;
-    state.backup.mark_dirty();
+    }
+    tx.execute(
+        "DELETE FROM project_event WHERE id = ?1",
+        rusqlite::params![id],
+    )?;
+    tx.commit()?;
     Ok(())
 }
 

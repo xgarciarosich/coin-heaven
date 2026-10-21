@@ -2734,3 +2734,117 @@ fn every_imported_line_names_its_import_and_can_be_listed_and_removed_by_it() {
     assert_eq!(list(Some(jan.batch_id)).total, 2);
     b.assert_intact();
 }
+
+/* --------------------------------------------------------------- events -- */
+
+fn event_input(name: &str, category: i64) -> ledger::EventInput {
+    ledger::EventInput {
+        name: name.into(),
+        default_category_id: category,
+        starts_on: None,
+        ends_on: None,
+        budget_minor: None,
+        notes: None,
+    }
+}
+
+#[test]
+fn events_say_what_is_wrong_in_words_can_be_changed_and_can_be_deleted() {
+    let b = Book::new();
+    let acct = account(&b, "Main");
+    let travel = category(b.db(), "Leisure & travel");
+    let food = category(b.db(), "Food & groceries");
+    import(
+        b.db(),
+        acct,
+        "t.csv",
+        vec![
+            row("2026-07-01", "HOTEL", -30_000),
+            row("2026-07-02", "TAXI", -2_000),
+        ],
+    );
+    let hotel = id_of(b.db(), "HOTEL", acct);
+    let taxi = id_of(b.db(), "TAXI", acct);
+
+    let trip = ledger::event_save(b.st(), None, event_input("Lisbon trip", travel)).unwrap();
+
+    // A second event with the same name (any case) is refused in plain words.
+    let dup = ledger::event_save(b.st(), None, event_input("lisbon TRIP", food)).unwrap_err();
+    assert!(dup.to_string().contains("already exists"), "{dup}");
+    // Dates the wrong way round, and a negative budget, likewise.
+    let mut backwards = event_input("Backwards", food);
+    backwards.starts_on = Some("2026-07-10".into());
+    backwards.ends_on = Some("2026-07-01".into());
+    let e = ledger::event_save(b.st(), None, backwards).unwrap_err();
+    assert!(e.to_string().contains("end before it starts"), "{e}");
+    let mut negative = event_input("Negative", food);
+    negative.budget_minor = Some(-1);
+    assert!(ledger::event_save(b.st(), None, negative).is_err());
+
+    // It can be changed, including keeping its own name.
+    let mut changed = event_input("Lisbon trip", food);
+    changed.budget_minor = Some(100_000);
+    changed.ends_on = Some("2026-07-09".into());
+    ledger::event_save(b.st(), Some(trip), changed).unwrap();
+    let listed = b
+        .db()
+        .with(|c| {
+            Ok(c.query_row(
+        "SELECT default_category_id, budget_minor, ends_on FROM project_event WHERE id = ?1",
+        [trip],
+        |r| Ok((r.get::<_, i64>(0)?, r.get::<_, i64>(1)?, r.get::<_, String>(2)?)),
+    )?)
+        })
+        .unwrap();
+    assert_eq!(listed, (food, 100_000, "2026-07-09".into()));
+
+    // Put two transactions in it; one has a category of its own.
+    exec(
+        b.db(),
+        "UPDATE txn SET project_id = ?1 WHERE id IN (?2, ?3)",
+        params![trip, hotel, taxi],
+    );
+    exec(
+        b.db(),
+        "UPDATE txn SET category_override_id = ?1 WHERE id = ?2",
+        params![travel, taxi],
+    );
+    let usage = b.db().with(|c| ledger::usage_of(c, trip)).unwrap();
+    assert_eq!((usage.txn_count, usage.txn_on_default), (2, 1));
+
+    // Deleting keeps the transactions, and (asked to) the category they only
+    // had because they were in the event.
+    b.db()
+        .with(|c| ledger::delete_event(c, trip, true))
+        .unwrap();
+    assert_eq!(
+        one::<i64>(b.db(), "SELECT count(*) FROM project_event", []),
+        0
+    );
+    let kept: Vec<(Option<i64>, Option<i64>)> = ids(b.db(), "SELECT id FROM txn")
+        .into_iter()
+        .map(|id| {
+            b.db()
+                .with(|c| {
+                    Ok(c.query_row(
+                        "SELECT project_id, effective_category_id FROM v_txn_effective WHERE id = ?1",
+                        [id],
+                        |r| Ok((r.get(0)?, r.get(1)?)),
+                    )?)
+                })
+                .unwrap()
+        })
+        .collect();
+    assert_eq!(kept.len(), 2);
+    assert!(
+        kept.iter().all(|(p, k)| p.is_none() && k.is_some()),
+        "{kept:?}"
+    );
+    let hotel_cat: Option<i64> = one(
+        b.db(),
+        "SELECT effective_category_id FROM v_txn_effective WHERE id = ?1",
+        [hotel],
+    );
+    assert_eq!(hotel_cat, Some(food), "kept the event's category");
+    b.assert_intact();
+}

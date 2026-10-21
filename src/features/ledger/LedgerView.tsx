@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Plus, Settings2, Tag, Trash2, Wand2, X } from "lucide-react";
+import { Plus, Settings2, Trash2, Wand2, X } from "lucide-react";
 import { Panel, PanelBody, PanelHead } from "@/components/ui/panel";
 import {
   Banner,
@@ -33,6 +33,7 @@ import { AutoCategorise } from "./AutoCategorise";
 import { RemoveImport } from "@/features/import/RemoveImport";
 import { BudgetsView } from "./BudgetsView";
 import { CategoriesTab } from "./CategoriesTab";
+import { DeleteEvent, EventForm } from "./EventEditor";
 import { MonthlyPlan } from "./MonthlyPlan";
 import { RecurringView } from "./RecurringView";
 import { CashFlowAnalytics } from "./CashFlowAnalytics";
@@ -88,6 +89,9 @@ export function LedgerView({ modules }: { modules: ModuleToggles | null }) {
   const [categoryId, setCategoryId] = useState<number | null>(null);
   const [search, setSearch] = useState("");
   // Only what one import brought in — to check it, or to take it back out.
+  const [creatingEvent, setCreatingEvent] = useState(false);
+  const [editingEvent, setEditingEvent] = useState<number | null>(null);
+  const [deletingEvent, setDeletingEvent] = useState<number | null>(null);
   const [batchId, setBatchId] = useState<number | null>(null);
   const [batches, setBatches] = useState<Batch[]>([]);
   const [removing, setRemoving] = useState<ImportImpact | null>(null);
@@ -390,7 +394,21 @@ export function LedgerView({ modules }: { modules: ModuleToggles | null }) {
                 <Settings2 className="size-3.5" strokeWidth={1.75} />
                 {t.ledger.tabs.categories}
               </Button>
-              <NewEvent categories={categories} onSaved={refreshAll} onError={setError} />
+              <Button
+                variant="primary"
+                disabled={categories.length === 0}
+                onClick={() => {
+                  setEditingEvent(null);
+                  setCreatingEvent((v) => !v);
+                }}
+              >
+                {creatingEvent ? (
+                  <X className="size-3.5" strokeWidth={2} />
+                ) : (
+                  <Plus className="size-3.5" strokeWidth={2} />
+                )}
+                {creatingEvent ? t.common.cancel : t.ledger.newEvent}
+              </Button>
             </div>
 
             {managing && (
@@ -405,11 +423,44 @@ export function LedgerView({ modules }: { modules: ModuleToggles | null }) {
               </div>
             )}
 
-            {events.length > 0 && (
+            {(events.length > 0 || creatingEvent) && (
               <Panel>
                 <PanelHead label={t.ledger.events} />
+                {creatingEvent && (
+                  <EventForm
+                    categories={categories}
+                    onSaved={() => {
+                      setCreatingEvent(false);
+                      refreshAll();
+                    }}
+                    onCancel={() => setCreatingEvent(false)}
+                  />
+                )}
                 <div className="divide-y divide-rule">
-                  {events.map((e) => (
+                  {events.map((e) =>
+                    editingEvent === e.id ? (
+                      <EventForm
+                        key={e.id}
+                        initial={e}
+                        categories={categories}
+                        onSaved={() => {
+                          setEditingEvent(null);
+                          refreshAll();
+                        }}
+                        onCancel={() => setEditingEvent(null)}
+                      />
+                    ) : deletingEvent === e.id ? (
+                      <DeleteEvent
+                        key={e.id}
+                        event={e}
+                        onCancel={() => setDeletingEvent(null)}
+                        onDeleted={() => {
+                          setDeletingEvent(null);
+                          refreshAll();
+                        }}
+                        onError={setError}
+                      />
+                    ) : (
                     <div key={e.id} className="flex items-center gap-4 px-5 py-2.5">
                       <span
                         className={cn(
@@ -440,8 +491,31 @@ export function LedgerView({ modules }: { modules: ModuleToggles | null }) {
                       >
                         {e.isClosed ? t.common.reopen : t.common.close}
                       </Button>
+                      <Button
+                        variant="ghost"
+                        onClick={() => {
+                          setEditingEvent(e.id);
+                          setDeletingEvent(null);
+                          setCreatingEvent(false);
+                        }}
+                      >
+                        {t.common.edit}
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        aria-label={t.ledger.deleteEventTitle(e.name)}
+                        title={t.ledger.deleteEventTitle(e.name)}
+                        onClick={() => {
+                          setDeletingEvent(e.id);
+                          setEditingEvent(null);
+                          setCreatingEvent(false);
+                        }}
+                      >
+                        <Trash2 className="size-3" strokeWidth={1.75} />
+                      </Button>
                     </div>
-                  ))}
+                    ),
+                  )}
                 </div>
               </Panel>
             )}
@@ -505,7 +579,6 @@ export function LedgerView({ modules }: { modules: ModuleToggles | null }) {
                         [
                           ["month", t.ledger.grouping.month],
                           ["category", t.ledger.grouping.category],
-                          ["flat", t.ledger.grouping.flat],
                         ] as const
                       ).map(([id, label]) => (
                         <button
@@ -862,103 +935,6 @@ function RowEditor({
           </div>
         )}
       </div>
-    </div>
-  );
-}
-
-function NewEvent({
-  categories,
-  onSaved,
-  onError,
-}: {
-  categories: Category[];
-  onSaved: () => void;
-  onError: (m: string) => void;
-}) {
-  const t = useT();
-  const [open, setOpen] = useState(false);
-  const [name, setName] = useState("");
-  const [categoryId, setCategoryId] = useState<number | null>(null);
-  const [budget, setBudget] = useState("");
-  const [startsOn, setStartsOn] = useState("");
-
-  useEffect(() => {
-    if (categoryId === null && categories.length > 0) {
-      setCategoryId(categories.find((c) => c.kind === "expense")?.id ?? categories[0]!.id);
-    }
-  }, [categories, categoryId]);
-
-  if (!open) {
-    return (
-      <Button variant="primary" onClick={() => setOpen(true)} disabled={categories.length === 0}>
-        <Plus className="size-3.5" strokeWidth={2} />
-        {t.ledger.newEvent}
-      </Button>
-    );
-  }
-  return (
-    <div className="flex items-end gap-2">
-      <TextField
-        label={t.ledger.name}
-        value={name}
-        autoFocus
-        className="w-44"
-        placeholder={t.ledger.eventPlaceholder}
-        onChange={(e) => setName(e.currentTarget.value)}
-      />
-      <SelectField
-        label={t.ledger.rollsUpTo}
-        value={categoryId ?? ""}
-        className="w-40"
-        onChange={(e) => setCategoryId(Number(e.currentTarget.value))}
-      >
-        {categories.map((c) => (
-          <option key={c.id} value={c.id}>
-            {c.name}
-          </option>
-        ))}
-      </SelectField>
-      <TextField
-        label={t.ledger.budget}
-        value={budget}
-        className="w-24"
-        onChange={(e) => setBudget(e.currentTarget.value)}
-      />
-      <TextField
-        label={t.ledger.starts}
-        type="date"
-        value={startsOn}
-        className="w-36"
-        onChange={(e) => setStartsOn(e.currentTarget.value)}
-      />
-      <Button
-        variant="primary"
-        onClick={() => {
-          if (!categoryId) return;
-          api
-            .eventSave(null, {
-              name,
-              defaultCategoryId: categoryId,
-              startsOn: startsOn || null,
-              endsOn: null,
-              budgetMinor: budget ? majorToMinor(Number(budget)) : null,
-              notes: null,
-            })
-            .then(() => {
-              setOpen(false);
-              setName("");
-              setBudget("");
-              onSaved();
-            })
-            .catch((e: unknown) => onError(msg(e)));
-        }}
-      >
-        <Tag className="size-3.5" strokeWidth={2} />
-        {t.common.create}
-      </Button>
-      <Button variant="ghost" onClick={() => setOpen(false)}>
-        <X className="size-3.5" strokeWidth={2} />
-      </Button>
     </div>
   );
 }

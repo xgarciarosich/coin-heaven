@@ -422,6 +422,16 @@ export interface EventItem {
   netMinor: Minor;
 }
 
+/** What deleting an event touches. */
+export interface EventUsage {
+  name: string;
+  defaultCategoryName: string;
+  txnCount: number;
+  /** Of those, how many have no category of their own. */
+  txnOnDefault: number;
+  ruleCount: number;
+}
+
 export interface EventInput {
   name: string;
   defaultCategoryId: number;
@@ -832,6 +842,8 @@ export interface MonthPlan {
 
 /** A payment that comes round on a rhythm, found in the ledger. */
 export interface Recurring {
+  /** Identifies it (merchant and rhythm), to remember what was said about it. */
+  key: string;
   name: string;
   categoryName: string | null;
   every: "weekly" | "fortnightly" | "monthly" | "quarterly" | "half-yearly" | "yearly";
@@ -847,6 +859,8 @@ export interface Recurring {
 
 export interface RecurringReport {
   items: Recurring[];
+  /** Found, but the person said it is not a recurring payment. */
+  hidden: Recurring[];
   yearlyMinor: Minor;
   monthlyMinor: Minor;
 }

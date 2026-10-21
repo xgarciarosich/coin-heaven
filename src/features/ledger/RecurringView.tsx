@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Panel, PanelBody, PanelHead } from "@/components/ui/panel";
-import { Banner, Empty } from "@/components/ui/controls";
+import { X } from "lucide-react";
+import { Banner, Button, Empty } from "@/components/ui/controls";
 import { api } from "@/lib/ipc";
 import { fmtMoney, fmtMoneyExact } from "@/lib/money";
 import { fmtDate } from "@/lib/region";
@@ -25,12 +26,20 @@ export function RecurringView() {
   const [report, setReport] = useState<RecurringReport | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
+  const load = () =>
     api
       .recurringList()
       .then(setReport)
       .catch((e: unknown) => setError(msg(e)));
+  useEffect(() => {
+    void load();
   }, []);
+  const say = (key: string, isRecurring: boolean) =>
+    api
+      .recurringSet(key, isRecurring)
+      .then(load)
+      .catch((e: unknown) => setError(msg(e)));
+  const [showHidden, setShowHidden] = useState(false);
 
   if (error) return <Banner tone="bad">{error}</Banner>;
   if (!report) return null;
@@ -38,7 +47,7 @@ export function RecurringView() {
   const active = report.items.filter((i) => i.active);
   const stopped = report.items.filter((i) => !i.active);
 
-  if (report.items.length === 0) {
+  if (report.items.length === 0 && report.hidden.length === 0) {
     return (
       <Panel>
         <PanelBody>
@@ -60,21 +69,52 @@ export function RecurringView() {
           )}
           <p className="text-[12px] leading-[1.6] text-ink-3">{r.lede}</p>
         </PanelBody>
-        {active.length > 0 && <Table rows={active} />}
+        {active.length > 0 && <Table rows={active} onNot={(k) => void say(k, false)} />}
       </Panel>
 
       {stopped.length > 0 && (
         <Panel>
           <PanelHead label={r.stopped} />
           <p className="px-5 pt-3 text-[11.5px] leading-[1.6] text-ink-3">{r.stoppedNote}</p>
-          <Table rows={stopped} muted />
+          <Table rows={stopped} muted onNot={(k) => void say(k, false)} />
+        </Panel>
+      )}
+
+      {report.hidden.length > 0 && (
+        <Panel>
+          <PanelHead
+            label={r.notRecurring(report.hidden.length)}
+            aside={
+              <Button variant="ghost" onClick={() => setShowHidden((v) => !v)}>
+                {showHidden ? r.hideList : r.showList}
+              </Button>
+            }
+          />
+          {showHidden && (
+            <>
+              <p className="px-5 pt-3 text-[11.5px] leading-[1.6] text-ink-3">{r.notRecurringNote}</p>
+              <Table rows={report.hidden} muted onBack={(k) => void say(k, true)} />
+            </>
+          )}
         </Panel>
       )}
     </div>
   );
 }
 
-function Table({ rows, muted }: { rows: Recurring[]; muted?: boolean }) {
+function Table({
+  rows,
+  muted,
+  onNot,
+  onBack,
+}: {
+  rows: Recurring[];
+  muted?: boolean;
+  /** "This is not a recurring payment." */
+  onNot?: (key: string) => void;
+  /** Put one that was set aside back in the list. */
+  onBack?: (key: string) => void;
+}) {
   const r = useT().ledger.recurring;
   return (
     <div className="overflow-x-auto">
@@ -87,13 +127,14 @@ function Table({ rows, muted }: { rows: Recurring[]; muted?: boolean }) {
             <th className="eyebrow py-2.5 pr-4 text-right font-medium">
               {muted ? "" : r.next}
             </th>
-            <th className="eyebrow py-2.5 pr-5 text-right font-medium">{r.perYear}</th>
+            <th className="eyebrow py-2.5 pr-3 text-right font-medium">{r.perYear}</th>
+            <th className="w-10 pr-4" />
           </tr>
         </thead>
         <tbody>
           {rows.map((i) => (
             <tr
-              key={`${i.name}-${i.typicalMinor}-${i.every}`}
+              key={`${i.key}-${i.typicalMinor}`}
               className={cn(
                 "border-b border-rule/60 last:border-b-0 hover:bg-surface-hi",
                 muted && "text-ink-3",
@@ -115,8 +156,26 @@ function Table({ rows, muted }: { rows: Recurring[]; muted?: boolean }) {
               <td className="tnum py-2.5 pr-4 text-right text-[12px] text-ink-3">
                 {muted ? r.lastPaid(fmtDate(i.lastOn)) : fmtDate(i.nextOn)}
               </td>
-              <td className="tnum py-2.5 pr-5 text-right text-[12.5px] font-medium text-ink">
+              <td className="tnum py-2.5 pr-3 text-right text-[12.5px] font-medium text-ink">
                 {fmtMoney(i.yearlyMinor)}
+              </td>
+              <td className="py-2.5 pr-4 text-right">
+                {onNot && (
+                  <button
+                    type="button"
+                    onClick={() => onNot(i.key)}
+                    aria-label={r.notOne(i.name)}
+                    title={r.notOne(i.name)}
+                    className="rounded p-1 text-ink-3 transition-colors hover:text-negative"
+                  >
+                    <X className="size-3.5" strokeWidth={2} />
+                  </button>
+                )}
+                {onBack && (
+                  <Button variant="ghost" onClick={() => onBack(i.key)}>
+                    {r.putBack}
+                  </Button>
+                )}
               </td>
             </tr>
           ))}

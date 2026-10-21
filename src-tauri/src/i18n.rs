@@ -101,6 +101,23 @@ const CATALOGUE: &[(&str, &str)] = &[
     ),
     ("key info is missing", "faltan los datos de la clave"),
     (
+        "cannot save the list: {}",
+        "no se puede guardar la lista: {}",
+    ),
+    (
+        "an event cannot end before it starts",
+        "un evento no puede terminar antes de empezar",
+    ),
+    (
+        "a budget cannot be negative",
+        "un presupuesto no puede ser negativo",
+    ),
+    (
+        "an event called {} already exists; choose another name",
+        "ya existe un evento llamado {}; elige otro nombre",
+    ),
+    ("that event no longer exists", "ese evento ya no existe"),
+    (
         "a box belongs to one person or is shared, not {}",
         "una casilla es de una persona o compartida, no {}",
     ),

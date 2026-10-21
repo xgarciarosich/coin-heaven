@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils";
 import { useT } from "@/lib/i18n";
 import type { Dict } from "@/locales/en";
 
-export type Grouping = "month" | "category" | "flat";
+export type Grouping = "month" | "category";
 
 const monthLabel = (t: Dict, period: string) => {
   const m = Number(period.slice(5, 7));
@@ -17,7 +17,6 @@ interface Node {
   key: string;
   label: string;
   rows: LedgerRow[];
-  children: Node[];
   net: number;
 }
 
@@ -29,7 +28,7 @@ function group(rows: LedgerRow[], by: (r: LedgerRow) => [string, string]): Node[
     const [key, label] = by(r);
     let node = map.get(key);
     if (!node) {
-      node = { key, label, rows: [], children: [], net: 0 };
+      node = { key, label, rows: [], net: 0 };
       map.set(key, node);
     }
     node.rows.push(r);
@@ -51,13 +50,13 @@ const byCategory =
   ];
 
 /**
- * The ledger as a two-level tree.
+ * The ledger, grouped by month or by category, and closed by default.
  *
- * A year of statements is two or three thousand lines, and a flat list of
- * those is only ever scrolled past. Grouping by month and then by category
- * turns it into twelve rows that each open into something the size of a
- * receipt — and the subtotal on every header is the number people are
- * actually looking for when they scroll.
+ * A year of statements is two or three thousand lines, and there is not much
+ * room: the groups are shown as one line each, with the subtotal that people
+ * are actually looking for, and open into the lines behind them when asked.
+ * Months run in calendar order; categories by weight, biggest first. Inside a
+ * group the lines are in date order.
  */
 export function TransactionTree({
   rows,
@@ -80,9 +79,16 @@ export function TransactionTree({
   renderEditor: (row: LedgerRow) => React.ReactNode;
 }) {
   const t = useT();
-  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  // Open groups. Nothing is open until it is asked for; the choice is kept
+  // while the data is refreshed, and starts over when the grouping changes.
+  const [open, setOpen] = useState<Set<string>>(new Set());
+  const [openFor, setOpenFor] = useState(grouping);
+  if (openFor !== grouping) {
+    setOpenFor(grouping);
+    setOpen(new Set());
+  }
   const toggle = (key: string) =>
-    setCollapsed((c) => {
+    setOpen((c) => {
       const next = new Set(c);
       if (next.has(key)) next.delete(key);
       else next.add(key);
@@ -90,26 +96,25 @@ export function TransactionTree({
     });
 
   const tree = useMemo<Node[]>(() => {
-    if (grouping === "flat") return [];
-    const [outer, inner] =
-      grouping === "month" ? [byMonth(t), byCategory(t)] : [byCategory(t), byMonth(t)];
-    return group(rows, outer)
-      .map((n) => ({ ...n, children: sortNodes(group(n.rows, inner), grouping === "month" ? "inner-category" : "inner-month") }))
-      .sort(cmp(grouping === "month" ? "month" : "category"));
+    const dated = [...rows].sort((a, b) => a.bookedOn.localeCompare(b.bookedOn) || a.id - b.id);
+    return group(dated, grouping === "month" ? byMonth(t) : byCategory(t)).sort(cmp(grouping));
   }, [rows, grouping, t]);
+
+  // An editor is on a line; its group has to be open for it to be seen.
+  const editingGroup = useMemo(
+    () => tree.find((n) => n.rows.some((r) => r.id === editing))?.key ?? null,
+    [tree, editing],
+  );
+  const isOpen = (key: string) => open.has(key) || key === editingGroup;
+  const allOpen = tree.length > 0 && tree.every((n) => isOpen(n.key));
 
   // The rows in the order they are on screen, so a shift-click can pick
   // "from that one to this one" and mean what the eye sees.
-  const visible = useMemo<number[]>(() => {
-    if (grouping === "flat") return rows.map((r) => r.id);
-    return tree.flatMap((outer) =>
-      collapsed.has(outer.key)
-        ? []
-        : outer.children.flatMap((inner) =>
-            collapsed.has(`${outer.key}/${inner.key}`) ? [] : inner.rows.map((r) => r.id),
-          ),
-    );
-  }, [rows, grouping, tree, collapsed]);
+  const visible = useMemo<number[]>(
+    () => tree.flatMap((n) => (isOpen(n.key) ? n.rows.map((r) => r.id) : [])),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [tree, open, editingGroup],
+  );
 
   const anchor = useRef<number | null>(null);
   const pick = (id: number, shift: boolean) => {
@@ -129,88 +134,68 @@ export function TransactionTree({
     return n === 0 ? "none" : n === ids.length ? "all" : "some";
   };
 
-  const body =
-    grouping === "flat"
-      ? rows.map((r) => (
+  const body = tree.map((n) => (
+    <Fragment key={n.key}>
+      <GroupHeader
+        label={n.label}
+        count={n.rows.length}
+        net={n.net}
+        collapsed={!isOpen(n.key)}
+        onToggle={() => toggle(n.key)}
+        selection={stateOf(n.rows.map((r) => r.id))}
+        onSelect={(on) => onSelectMany(n.rows.map((r) => r.id), on)}
+      />
+      {isOpen(n.key) &&
+        n.rows.map((r) => (
           <RowWithEditor
             key={r.id}
             row={r}
-            depth={0}
+            depth={1}
             selected={selected}
             onPick={pick}
             editing={editing}
             onEdit={onEdit}
             renderEditor={renderEditor}
           />
-        ))
-      : tree.map((outer) => (
-          <Fragment key={outer.key}>
-            <GroupHeader
-              label={outer.label}
-              count={outer.rows.length}
-              net={outer.net}
-              collapsed={collapsed.has(outer.key)}
-              onToggle={() => toggle(outer.key)}
-              level={0}
-              selection={stateOf(outer.rows.map((r) => r.id))}
-              onSelect={(on) => onSelectMany(outer.rows.map((r) => r.id), on)}
-            />
-            {!collapsed.has(outer.key) &&
-              outer.children.map((inner) => {
-                const key = `${outer.key}/${inner.key}`;
-                return (
-                  <Fragment key={key}>
-                    <GroupHeader
-                      label={inner.label}
-                      count={inner.rows.length}
-                      net={inner.net}
-                      collapsed={collapsed.has(key)}
-                      onToggle={() => toggle(key)}
-                      level={1}
-                      selection={stateOf(inner.rows.map((r) => r.id))}
-                      onSelect={(on) => onSelectMany(inner.rows.map((r) => r.id), on)}
-                    />
-                    {!collapsed.has(key) &&
-                      inner.rows.map((r) => (
-                        <RowWithEditor
-                          key={r.id}
-                          row={r}
-                          depth={2}
-                          selected={selected}
-                          onPick={pick}
-                          editing={editing}
-                          onEdit={onEdit}
-                          renderEditor={renderEditor}
-                        />
-                      ))}
-                  </Fragment>
-                );
-              })}
-          </Fragment>
-        ));
+        ))}
+    </Fragment>
+  ));
 
   return (
-    <div className="max-h-[620px] overflow-auto">
-      <table className="w-full">
-        <thead className="sticky top-0 z-10 bg-surface">
-          <tr className="border-b border-rule">
-            <th className="w-8 py-2.5 pl-5" />
-            {t.ledger.columns.map((h, i) => (
-              <th
-                key={h || i}
-                className={cn(
-                  "eyebrow py-2.5 font-medium",
-                  i === 4 ? "text-right" : "text-left",
-                  i === 5 && "pr-5",
-                )}
-              >
-                {h}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>{body}</tbody>
-      </table>
+    <div>
+      {tree.length > 1 && (
+        <div className="flex justify-end border-b border-rule px-5 py-1.5">
+          <button
+            type="button"
+            onClick={() => setOpen(allOpen ? new Set() : new Set(tree.map((n) => n.key)))}
+            className="eyebrow underline-offset-2 hover:text-ink hover:underline"
+          >
+            {allOpen ? t.ledger.closeAll : t.ledger.openAll}
+          </button>
+        </div>
+      )}
+      <div className="max-h-[620px] overflow-auto">
+        <table className="w-full">
+          <thead className="sticky top-0 z-10 bg-surface">
+            <tr className="border-b border-rule">
+              <th className="w-8 py-2.5 pl-5" />
+              {t.ledger.columns.map((h, i) => (
+                <th
+                  key={h || i}
+                  className={cn(
+                    "eyebrow py-2.5 font-medium",
+                    i === 4 ? "text-right" : "text-left",
+                    i === 5 && "pr-5",
+                  )}
+                >
+                  {h}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>{body}</tbody>
+        </table>
+      </div>
     </div>
   );
 }
@@ -223,17 +208,12 @@ function cmp(kind: "month" | "category") {
       : Math.abs(b.net) - Math.abs(a.net) || a.label.localeCompare(b.label);
 }
 
-function sortNodes(nodes: Node[], kind: "inner-month" | "inner-category") {
-  return [...nodes].sort(cmp(kind === "inner-month" ? "month" : "category"));
-}
-
 function GroupHeader({
   label,
   count,
   net,
   collapsed,
   onToggle,
-  level,
   selection,
   onSelect,
 }: {
@@ -242,20 +222,16 @@ function GroupHeader({
   net: number;
   collapsed: boolean;
   onToggle: () => void;
-  level: 0 | 1;
   selection: "all" | "some" | "none";
   onSelect: (on: boolean) => void;
 }) {
   const t = useT();
   return (
     <tr
-      className={cn(
-        "cursor-pointer border-b border-rule transition-colors",
-        level === 0 ? "bg-surface-hi" : "bg-surface-hi/40",
-      )}
+      className="cursor-pointer border-b border-rule bg-surface-hi transition-colors hover:bg-surface-hi/70"
       onClick={onToggle}
     >
-      <td colSpan={5} className={cn("py-2", level === 0 ? "pl-5" : "pl-10")}>
+      <td colSpan={5} className="py-2 pl-5">
         <div className="flex items-center gap-2">
           {/* A whole bundle at once: the group's checkbox sits before its
               name, and does not fold the group. */}
@@ -278,13 +254,7 @@ function GroupHeader({
             )}
             strokeWidth={1.75}
           />
-          <span
-            className={cn(
-              level === 0 ? "text-[12.5px] text-ink" : "text-[12px] text-ink-2",
-            )}
-          >
-            {label}
-          </span>
+          <span className="text-[12.5px] text-ink">{label}</span>
           <span className="tnum text-[10.5px] text-ink-3">{count}</span>
         </div>
       </td>
@@ -293,7 +263,7 @@ function GroupHeader({
           className={cn(
             "tnum text-[12.5px]",
             net < 0 ? "text-ink" : "text-positive",
-            level === 0 && "font-medium",
+            "font-medium",
           )}
         >
           {fmtMoney(net)}

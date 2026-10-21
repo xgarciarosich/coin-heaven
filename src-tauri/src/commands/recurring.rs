@@ -31,6 +31,9 @@ const PERIODS: &[(&str, i64, i64)] = &[
 #[derive(Serialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct Recurring {
+    /// What identifies it across runs: the merchant and the rhythm. Used to
+    /// remember that the person said "this is not a recurring payment".
+    pub key: String,
     /// What it is called: the description the merchant is most often seen as.
     pub name: String,
     pub category_name: Option<String>,
@@ -55,6 +58,8 @@ pub struct Recurring {
 #[serde(rename_all = "camelCase")]
 pub struct RecurringReport {
     pub items: Vec<Recurring>,
+    /// What was found but the person has said is not a recurring payment.
+    pub hidden: Vec<Recurring>,
     /// What the ones still going cost over a year, and a twelfth of that.
     pub yearly_minor: i64,
     pub monthly_minor: i64,
@@ -116,7 +121,7 @@ pub fn detect(c: &rusqlite::Connection, today: NaiveDate) -> AppResult<Recurring
     }
 
     let mut items = Vec::new();
-    for (_, mut rows) in by_key {
+    for (merchant_key, mut rows) in by_key {
         rows.sort_by_key(|r| r.on);
         // The same merchant can be two different payments: a phone line and a
         // phone insurance, a rent and a parking space. Amounts within a factor
@@ -181,6 +186,7 @@ pub fn detect(c: &rusqlite::Connection, today: NaiveDate) -> AppResult<Recurring
                 .map(|(n, _)| n.to_string())
                 .unwrap_or_default();
             items.push(Recurring {
+                key: format!("{merchant_key}|{label}"),
                 name,
                 category_name: g.iter().find_map(|r| r.category.clone()),
                 every: label.to_string(),
@@ -196,6 +202,14 @@ pub fn detect(c: &rusqlite::Connection, today: NaiveDate) -> AppResult<Recurring
         }
     }
 
+    // What the person has said is not recurring is set apart, not forgotten:
+    // it can be put back, and it is never counted in the totals.
+    let dismissed = dismissed_keys(c);
+    let (hidden, mut items): (Vec<_>, Vec<_>) =
+        items.into_iter().partition(|i| dismissed.contains(&i.key));
+    let mut hidden = hidden;
+    hidden.sort_by(|a, b| a.name.cmp(&b.name));
+
     items.sort_by(|a, b| {
         b.active
             .cmp(&a.active)
@@ -209,9 +223,49 @@ pub fn detect(c: &rusqlite::Connection, today: NaiveDate) -> AppResult<Recurring
         .sum();
     Ok(RecurringReport {
         items,
+        hidden,
         yearly_minor: yearly,
         monthly_minor: yearly / 12,
     })
+}
+
+const DISMISSED: &str = "recurring.dismissed";
+
+fn dismissed_keys(c: &rusqlite::Connection) -> Vec<String> {
+    c.query_row(
+        "SELECT value_json FROM app_setting WHERE key = ?1",
+        [DISMISSED],
+        |r| r.get::<_, String>(0),
+    )
+    .ok()
+    .and_then(|j| serde_json::from_str(&j).ok())
+    .unwrap_or_default()
+}
+
+/// Say whether a detected payment is one: `false` removes it from the list,
+/// `true` puts it back. Nothing is deleted from the ledger either way.
+pub fn set_recurring(c: &rusqlite::Connection, key: &str, is_recurring: bool) -> AppResult<()> {
+    let mut keys = dismissed_keys(c);
+    keys.retain(|k| k != key);
+    if !is_recurring {
+        keys.push(key.to_string());
+    }
+    let json = serde_json::to_string(&keys)
+        .map_err(|e| crate::error::AppError::Other(format!("cannot save the list: {e}")))?;
+    c.execute(
+        "INSERT INTO app_setting (key, value_json) VALUES (?1, ?2)
+         ON CONFLICT(key) DO UPDATE SET value_json = excluded.value_json,
+             updated_at = strftime('%Y-%m-%dT%H:%M:%SZ','now')",
+        rusqlite::params![DISMISSED, json],
+    )?;
+    Ok(())
+}
+
+#[tauri::command]
+pub fn recurring_set(state: State<'_, AppState>, key: String, is_recurring: bool) -> AppResult<()> {
+    state.db()?.with(|c| set_recurring(c, &key, is_recurring))?;
+    state.backup.mark_dirty();
+    Ok(())
 }
 
 #[tauri::command]

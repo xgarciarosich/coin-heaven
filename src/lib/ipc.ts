@@ -60,6 +60,7 @@ import type {
   Category,
   DateFormat,
   EventInput,
+  EventUsage,
   PeriodTotals,
   TxnEdit,
   FireView,
@@ -245,7 +246,9 @@ export const api = {
     call<number>("event_save", { id, input }),
   eventSetClosed: (id: number, closed: boolean) =>
     call<void>("event_set_closed", { id, closed }),
-  eventDelete: (id: number) => call<void>("event_delete", { id }),
+  eventDelete: (id: number, keepCategory = true) =>
+    call<void>("event_delete", { id, keepCategory }),
+  eventUsage: (id: number) => call<EventUsage>("event_usage", { id }),
 
   txnList: (filter: TxnFilter) => call<Ledger>("txn_list", { filter }),
   /** `null` leaves a field alone; clearing is explicit. */
@@ -295,6 +298,9 @@ export const api = {
   marketFetch: (holdingIds: number[]) => call<MarketResult[]>("market_fetch", { holdingIds }),
   marketClear: (holdingId: number) => call<number>("market_clear", { holdingId }),
   /** Payments that come round on a rhythm, found in the ledger. */
+  /** Say a detected payment is (or is not) a recurring one. */
+  recurringSet: (key: string, isRecurring: boolean) =>
+    call<void>("recurring_set", { key, isRecurring }),
   recurringList: () => call<RecurringReport>("recurring_list"),
   /** Writes CSV files into a new folder inside `folder`. */
   dataExport: (folder: string, delimiter: string, decimal: string) =>
